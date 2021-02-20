@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.util;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
@@ -95,7 +97,7 @@ public class BitString {
     return bits.hashCode() + bitCount;
   }
 
-  @Override public boolean equals(Object o) {
+  @Override public boolean equals(@Nullable Object o) {
     return o == this
         || o instanceof BitString
         && bits.equals(((BitString) o).bits)
@@ -206,7 +208,7 @@ public class BitString {
    * @return BitString
    */
   public static BitString createFromBytes(byte[] bytes) {
-    int bitCount = Objects.requireNonNull(bytes).length * 8;
+    int bitCount = Objects.requireNonNull(bytes, "bytes").length * 8;
     StringBuilder sb = new StringBuilder(bitCount);
     for (byte b : bytes) {
       final String s = Integer.toBinaryString(Byte.toUnsignedInt(b));

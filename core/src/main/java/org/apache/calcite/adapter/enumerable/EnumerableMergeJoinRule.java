@@ -25,19 +25,23 @@ import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
+import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 /** Planner rule that converts a
- * {@link org.apache.calcite.rel.logical.LogicalJoin} relational expression
+ * {@link LogicalJoin} relational expression
  * {@link EnumerableConvention enumerable calling convention}.
+ * You may provide a custom config to convert other nodes that extend {@link Join}.
  *
  * @see EnumerableJoinRule
  * @see EnumerableRules#ENUMERABLE_MERGE_JOIN_RULE
@@ -54,8 +58,8 @@ class EnumerableMergeJoinRule extends ConverterRule {
     super(config);
   }
 
-  @Override public RelNode convert(RelNode rel) {
-    LogicalJoin join = (LogicalJoin) rel;
+  @Override public @Nullable RelNode convert(RelNode rel) {
+    Join join = (Join) rel;
     final JoinInfo info = join.analyzeCondition();
     if (!EnumerableMergeJoin.isMergeJoinSupported(join.getJoinType())) {
       // EnumerableMergeJoin only supports certain join types.

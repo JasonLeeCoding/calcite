@@ -28,6 +28,7 @@ import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlJdbcFunctionCall;
 import org.apache.calcite.sql.SqlLiteral;
@@ -65,6 +66,7 @@ import org.apache.calcite.util.trace.CalciteTrace;
 
 import com.google.common.base.Throwables;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
@@ -305,6 +307,17 @@ public abstract class SqlOperatorBaseTest {
 
   // same with tester but without implicit type coercion.
   protected final SqlTester strictTester;
+
+  /** Function object that returns a string with 2 copies of each character.
+   * For example, {@code DOUBLER.apply("xy")} returns {@code "xxyy"}. */
+  private static final UnaryOperator<String> DOUBLER =
+      new UnaryOperator<String>() {
+        final Pattern pattern = Pattern.compile("(.)");
+
+        @Override public String apply(String s) {
+          return pattern.matcher(s).replaceAll("$1$1");
+        }
+      };
 
   /**
    * Creates a SqlOperatorBaseTest.
@@ -3839,6 +3852,43 @@ public abstract class SqlOperatorBaseTest {
     tester.checkBoolean("'ab\ncd\nef' not like '%cde%'", Boolean.TRUE);
   }
 
+  @Test void testRlikeOperator() {
+    checkRlike(SqlLibrary.SPARK);
+    checkRlike(SqlLibrary.HIVE);
+    checkRlikeFails(SqlLibrary.MYSQL);
+    checkRlikeFails(SqlLibrary.ORACLE);
+  }
+
+  void checkRlike(SqlLibrary library) {
+    final SqlTester tester1 = libraryTester(library);
+    tester1.setFor(SqlLibraryOperators.RLIKE, VM_EXPAND);
+    tester1.checkBoolean("'Merrisa@gmail.com' rlike '.+@*\\.com'", Boolean.TRUE);
+    tester1.checkBoolean("'Merrisa@gmail.com' rlike '.com$'", Boolean.TRUE);
+    tester1.checkBoolean("'acbd' rlike '^ac+'", Boolean.TRUE);
+    tester1.checkBoolean("'acb' rlike 'acb|efg'", Boolean.TRUE);
+    tester1.checkBoolean("'acb|efg' rlike 'acb\\|efg'", Boolean.TRUE);
+    tester1.checkBoolean("'Acbd' rlike '^ac+'", Boolean.FALSE);
+    tester1.checkBoolean("'Merrisa@gmail.com' rlike 'Merrisa_'", Boolean.FALSE);
+    tester1.checkBoolean("'abcdef' rlike '%cd%'", Boolean.FALSE);
+
+    tester1.setFor(SqlLibraryOperators.NOT_RLIKE, VM_EXPAND);
+    tester1.checkBoolean("'Merrisagmail' not rlike '.+@*\\.com'", Boolean.TRUE);
+    tester1.checkBoolean("'acbd' not rlike '^ac+'", Boolean.FALSE);
+    tester1.checkBoolean("'acb|efg' not rlike 'acb\\|efg'", Boolean.FALSE);
+    tester1.checkBoolean("'Merrisa@gmail.com' not rlike 'Merrisa_'", Boolean.TRUE);
+  }
+
+  void checkRlikeFails(SqlLibrary library) {
+    final SqlTester tester1 = libraryTester(library);
+    tester1.setFor(SqlLibraryOperators.RLIKE, VM_EXPAND);
+    final String noRlike = "(?s).*No match found for function signature RLIKE";
+    tester1.checkFails("^'Merrisa@gmail.com' rlike '.+@*\\.com'^", noRlike, false);
+    tester1.checkFails("^'acb' rlike 'acb|efg'^", noRlike, false);
+    final String noNotRlike = "(?s).*No match found for function signature NOT RLIKE";
+    tester1.checkFails("^'abcdef' not rlike '%cd%'^", noNotRlike, false);
+    tester1.checkFails("^'Merrisa@gmail.com' not rlike 'Merrisa_'^", noNotRlike, false);
+  }
+
   @Test void testLikeEscape() {
     tester.setFor(SqlStdOperatorTable.LIKE);
     tester.checkBoolean("'a_c' like 'a#_c' escape '#'", Boolean.TRUE);
@@ -3849,6 +3899,19 @@ public abstract class SqlOperatorBaseTest {
     tester.checkBoolean("'a%cde' like 'a\\%c_e' escape '\\'", Boolean.TRUE);
     tester.checkBoolean("'abbc' like 'a%c' escape '\\'", Boolean.TRUE);
     tester.checkBoolean("'abbc' like 'a\\%c' escape '\\'", Boolean.FALSE);
+  }
+
+  @Test void testIlikeEscape() {
+    tester.setFor(SqlLibraryOperators.ILIKE);
+    final SqlTester tester1 = libraryTester(SqlLibrary.POSTGRESQL);
+    tester1.checkBoolean("'a_c' ilike 'a#_C' escape '#'", Boolean.TRUE);
+    tester1.checkBoolean("'axc' ilike 'a#_C' escape '#'", Boolean.FALSE);
+    tester1.checkBoolean("'a_c' ilike 'a\\_C' escape '\\'", Boolean.TRUE);
+    tester1.checkBoolean("'axc' ilike 'a\\_C' escape '\\'", Boolean.FALSE);
+    tester1.checkBoolean("'a%c' ilike 'a\\%C' escape '\\'", Boolean.TRUE);
+    tester1.checkBoolean("'a%cde' ilike 'a\\%C_e' escape '\\'", Boolean.TRUE);
+    tester1.checkBoolean("'abbc' ilike 'a%C' escape '\\'", Boolean.TRUE);
+    tester1.checkBoolean("'abbc' ilike 'a\\%C' escape '\\'", Boolean.FALSE);
   }
 
   @Disabled("[CALCITE-525] Exception-handling in built-in functions")
@@ -3881,6 +3944,48 @@ public abstract class SqlOperatorBaseTest {
     tester.checkBoolean("'ab\ncd\nef' like '%cde%'", Boolean.FALSE);
   }
 
+  @Test void testIlikeOperator() {
+    tester.setFor(SqlLibraryOperators.ILIKE);
+    final String noLike = "No match found for function signature ILIKE";
+    tester.checkFails("^'a' ilike 'b'^", noLike, false);
+    tester.checkFails("^'a' ilike 'b' escape 'c'^", noLike, false);
+    final String noNotLike = "No match found for function signature NOT ILIKE";
+    tester.checkFails("^'a' not ilike 'b'^", noNotLike, false);
+    tester.checkFails("^'a' not ilike 'b' escape 'c'^", noNotLike, false);
+
+    final SqlTester tester1 = libraryTester(SqlLibrary.POSTGRESQL);
+    tester1.checkBoolean("''  ilike ''", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike 'a'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike 'b'", Boolean.FALSE);
+    tester1.checkBoolean("'a' ilike 'A'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike 'a_'", Boolean.FALSE);
+    tester1.checkBoolean("'a' ilike '_a'", Boolean.FALSE);
+    tester1.checkBoolean("'a' ilike '%a'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike '%A'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike '%a%'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike '%A%'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike 'a%'", Boolean.TRUE);
+    tester1.checkBoolean("'a' ilike 'A%'", Boolean.TRUE);
+    tester1.checkBoolean("'ab'   ilike 'a_'", Boolean.TRUE);
+    tester1.checkBoolean("'ab'   ilike 'A_'", Boolean.TRUE);
+    tester1.checkBoolean("'abc'  ilike 'a_'", Boolean.FALSE);
+    tester1.checkBoolean("'abcd' ilike 'a%'", Boolean.TRUE);
+    tester1.checkBoolean("'abcd' ilike 'A%'", Boolean.TRUE);
+    tester1.checkBoolean("'ab'   ilike '_b'", Boolean.TRUE);
+    tester1.checkBoolean("'ab'   ilike '_B'", Boolean.TRUE);
+    tester1.checkBoolean("'abcd' ilike '_d'", Boolean.FALSE);
+    tester1.checkBoolean("'abcd' ilike '%d'", Boolean.TRUE);
+    tester1.checkBoolean("'abcd' ilike '%D'", Boolean.TRUE);
+    tester1.checkBoolean("'ab\ncd' ilike 'ab%'", Boolean.TRUE);
+    tester1.checkBoolean("'ab\ncd' ilike 'aB%'", Boolean.TRUE);
+    tester1.checkBoolean("'abc\ncd' ilike 'ab%'", Boolean.TRUE);
+    tester1.checkBoolean("'abc\ncd' ilike 'Ab%'", Boolean.TRUE);
+    tester1.checkBoolean("'123\n\n45\n' ilike '%'", Boolean.TRUE);
+    tester1.checkBoolean("'ab\ncd\nef' ilike '%cd%'", Boolean.TRUE);
+    tester1.checkBoolean("'ab\ncd\nef' ilike '%CD%'", Boolean.TRUE);
+    tester1.checkBoolean("'ab\ncd\nef' ilike '%cde%'", Boolean.FALSE);
+  }
+
   /** Test case for
    * <a href="https://issues.apache.org/jira/browse/CALCITE-1898">[CALCITE-1898]
    * LIKE must match '.' (period) literally</a>. */
@@ -3888,6 +3993,15 @@ public abstract class SqlOperatorBaseTest {
     tester.checkBoolean("'abc' like 'a.c'", Boolean.FALSE);
     tester.checkBoolean("'abcde' like '%c.e'", Boolean.FALSE);
     tester.checkBoolean("'abc.e' like '%c.e'", Boolean.TRUE);
+  }
+
+  @Test void testIlikeDot() {
+    tester.setFor(SqlLibraryOperators.ILIKE);
+    final SqlTester tester1 = libraryTester(SqlLibrary.POSTGRESQL);
+    tester1.checkBoolean("'abc' ilike 'a.c'", Boolean.FALSE);
+    tester1.checkBoolean("'abcde' ilike '%c.e'", Boolean.FALSE);
+    tester1.checkBoolean("'abc.e' ilike '%c.e'", Boolean.TRUE);
+    tester1.checkBoolean("'abc.e' ilike '%c.E'", Boolean.TRUE);
   }
 
   @Test void testNotSimilarToOperator() {
@@ -4354,6 +4468,12 @@ public abstract class SqlOperatorBaseTest {
     tester.setFor(SqlStdOperatorTable.CHARACTER_LENGTH);
     tester.checkScalarExact("CHARACTER_LENGTH('abc')", "3");
     tester.checkNull("CHARACTER_LENGTH(cast(null as varchar(1)))");
+  }
+
+  @Test void testOctetLengthFunc() {
+    tester.setFor(SqlStdOperatorTable.OCTET_LENGTH);
+    tester.checkScalarExact("OCTET_LENGTH(x'aabbcc')", "3");
+    tester.checkNull("OCTET_LENGTH(cast(null as varbinary(1)))");
   }
 
   @Test void testAsciiFunc() {
@@ -6635,73 +6755,43 @@ public abstract class SqlOperatorBaseTest {
     tester.checkNull("last_day(cast(null as timestamp))");
   }
 
+  /** Tests the {@code SUBSTRING} operator. Many test cases that used to be
+   * have been moved to {@link SubFunChecker#assertSubFunReturns}, and are
+   * called for both {@code SUBSTRING} and {@code SUBSTR}. */
   @Test void testSubstringFunction() {
+    checkSubstringFunction(tester);
+    checkSubstringFunction(
+        tester.withConformance(SqlConformanceEnum.BIG_QUERY));
+  }
+
+  void checkSubstringFunction(SqlTester tester) {
     tester.setFor(SqlStdOperatorTable.SUBSTRING);
     tester.checkString(
         "substring('abc' from 1 for 2)",
         "ab",
         "VARCHAR(3) NOT NULL");
     tester.checkString(
-        "substring('abc' from 2 for 8)",
-        "bc",
-        "VARCHAR(3) NOT NULL");
-    tester.checkString(
-        "substring('abc' from 0 for 2)",
-        "a",
-        "VARCHAR(3) NOT NULL");
-    tester.checkString(
-        "substring('abc' from 0 for 0)",
-        "",
-        "VARCHAR(3) NOT NULL");
-    tester.checkString(
-        "substring('abc' from 8 for 2)",
-        "",
-        "VARCHAR(3) NOT NULL");
-    tester.checkFails(
-        "substring('abc' from 1 for -1)",
-        "Substring error: negative substring length not allowed",
-        true);
-    tester.checkString(
-        "substring('abc' from 2)", "bc", "VARCHAR(3) NOT NULL");
-    tester.checkString(
-        "substring('abc' from 0)", "abc", "VARCHAR(3) NOT NULL");
-    tester.checkString(
-        "substring('abc' from 8)", "", "VARCHAR(3) NOT NULL");
-    tester.checkString(
-        "substring('abc' from -2)", "bc", "VARCHAR(3) NOT NULL");
-
-    tester.checkString(
         "substring(x'aabbcc' from 1 for 2)",
         "aabb",
         "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from 2 for 8)",
-        "bbcc",
-        "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from 0 for 2)",
-        "aa",
-        "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from 0 for 0)",
-        "",
-        "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from 8 for 2)",
-        "",
-        "VARBINARY(3) NOT NULL");
-    tester.checkFails(
-        "substring(x'aabbcc' from 1 for -1)",
-        "Substring error: negative substring length not allowed",
-        true);
-    tester.checkString(
-        "substring(x'aabbcc' from 2)", "bbcc", "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from 0)", "aabbcc", "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from 8)", "", "VARBINARY(3) NOT NULL");
-    tester.checkString(
-        "substring(x'aabbcc' from -2)", "bbcc", "VARBINARY(3) NOT NULL");
+
+    switch (tester.getConformance().semantics()) {
+    case BIG_QUERY:
+      tester.checkString("substring('abc' from 1 for -1)", "",
+          "VARCHAR(3) NOT NULL");
+      tester.checkString("substring(x'aabbcc' from 1 for -1)", "",
+          "VARBINARY(3) NOT NULL");
+      break;
+    default:
+      tester.checkFails(
+          "substring('abc' from 1 for -1)",
+          "Substring error: negative substring length not allowed",
+          true);
+      tester.checkFails(
+          "substring(x'aabbcc' from 1 for -1)",
+          "Substring error: negative substring length not allowed",
+          true);
+    }
 
     if (Bug.FRG296_FIXED) {
       // substring regexp not supported yet
@@ -6711,6 +6801,248 @@ public abstract class SqlOperatorBaseTest {
           "xx");
     }
     tester.checkNull("substring(cast(null as varchar(1)),1,2)");
+    tester.checkNull("substring(cast(null as varchar(1)) FROM 1 FOR 2)");
+    tester.checkNull("substring('abc' FROM cast(null as integer) FOR 2)");
+    tester.checkNull("substring('abc' FROM cast(null as integer))");
+    tester.checkNull("substring('abc' FROM 2 FOR cast(null as integer))");
+  }
+
+  /** Tests the non-standard SUBSTR function, that has syntax
+   * "SUBSTR(value, start [, length ])", as used in BigQuery. */
+  @Test void testBigQuerySubstrFunction() {
+    substrChecker(SqlLibrary.BIG_QUERY, SqlLibraryOperators.SUBSTR_BIG_QUERY)
+        .check();
+  }
+
+  /** Tests the non-standard SUBSTR function, that has syntax
+   * "SUBSTR(value, start [, length ])", as used in Oracle. */
+  @Test void testMysqlSubstrFunction() {
+    substrChecker(SqlLibrary.MYSQL, SqlLibraryOperators.SUBSTR_MYSQL)
+        .check();
+  }
+
+  /** Tests the non-standard SUBSTR function, that has syntax
+   * "SUBSTR(value, start [, length ])", as used in Oracle. */
+  @Test void testOracleSubstrFunction() {
+    substrChecker(SqlLibrary.ORACLE, SqlLibraryOperators.SUBSTR_ORACLE)
+        .check();
+  }
+
+  /** Tests the non-standard SUBSTR function, that has syntax
+   * "SUBSTR(value, start [, length ])", as used in PostgreSQL. */
+  @Test void testPostgresqlSubstrFunction() {
+    substrChecker(SqlLibrary.POSTGRESQL, SqlLibraryOperators.SUBSTR_POSTGRESQL)
+        .check();
+  }
+
+  /** Tests the standard {@code SUBSTRING} function in the mode that has
+   * BigQuery's non-standard semantics. */
+  @Test void testBigQuerySubstringFunction() {
+    substringChecker(SqlConformanceEnum.BIG_QUERY, SqlLibrary.BIG_QUERY)
+        .check();
+  }
+
+  /** Tests the standard {@code SUBSTRING} function in ISO standard
+   * semantics. */
+  @Test void testStandardSubstringFunction() {
+    substringChecker(SqlConformanceEnum.STRICT_2003, SqlLibrary.POSTGRESQL)
+        .check();
+  }
+
+  SubFunChecker substringChecker(SqlConformanceEnum conformance,
+      SqlLibrary library) {
+    return new SubFunChecker(
+        tester.withConnectionFactory(
+            CalciteAssert.EMPTY_CONNECTION_FACTORY
+                .with(
+                    new CalciteAssert.AddSchemaSpecPostProcessor(
+                        CalciteAssert.SchemaSpec.HR))
+                .with(CalciteConnectionProperty.CONFORMANCE, conformance)),
+        library,
+        SqlStdOperatorTable.SUBSTRING);
+  }
+
+  SubFunChecker substrChecker(SqlLibrary library, SqlFunction function) {
+    return new SubFunChecker(tester(library), library, function);
+  }
+
+  /** Tests various configurations of {@code SUBSTR} and {@code SUBSTRING}
+   * functions. */
+  static class SubFunChecker {
+    final SqlTester t;
+    final SqlLibrary library;
+    final SqlFunction function;
+
+    SubFunChecker(SqlTester t, SqlLibrary library, SqlFunction function) {
+      this.t = t;
+      t.setFor(function);
+      this.library = library;
+      this.function = function;
+    }
+
+    void check() {
+      // The following tests have been checked on Oracle 11g R2, PostgreSQL 9.6,
+      // MySQL 5.6, Google BigQuery.
+      //
+      // PostgreSQL and MySQL have a standard SUBSTRING(x FROM s [FOR l])
+      // operator, and its behavior is identical to their SUBSTRING(x, s [, l]).
+      // Oracle and BigQuery do not have SUBSTRING.
+      assertReturns("abc", 1, "abc");
+      assertReturns("abc", 2, "bc");
+      assertReturns("abc", 3, "c");
+      assertReturns("abc", 4, "");
+      assertReturns("abc", 5, "");
+
+      switch (library) {
+      case BIG_QUERY:
+      case ORACLE:
+        assertReturns("abc", 0, "abc");
+        assertReturns("abc", 0, 5, "abc");
+        assertReturns("abc", 0, 4, "abc");
+        assertReturns("abc", 0, 3, "abc");
+        assertReturns("abc", 0, 2, "ab");
+        break;
+      case POSTGRESQL:
+        assertReturns("abc", 0, "abc");
+        assertReturns("abc", 0, 5, "abc");
+        assertReturns("abc", 0, 4, "abc");
+        assertReturns("abc", 0, 3, "ab");
+        assertReturns("abc", 0, 2, "a");
+        break;
+      case MYSQL:
+        assertReturns("abc", 0, "");
+        assertReturns("abc", 0, 5, "");
+        assertReturns("abc", 0, 4, "");
+        assertReturns("abc", 0, 3, "");
+        assertReturns("abc", 0, 2, "");
+        break;
+      }
+      assertReturns("abc", 0, 0, "");
+      assertReturns("abc", 2, 8, "bc");
+      assertReturns("abc", 1, 0, "");
+      assertReturns("abc", 1, 2, "ab");
+      assertReturns("abc", 1, 3, "abc");
+      assertReturns("abc", 4, 3, "");
+      assertReturns("abc", 4, 4, "");
+      assertReturns("abc", 8, 2, "");
+
+      switch (library) {
+      case POSTGRESQL:
+        assertReturns("abc", 1, -1, null);
+        assertReturns("abc", 4, -1, null);
+        break;
+      default:
+        assertReturns("abc", 1, -1, "");
+        assertReturns("abc", 4, -1, "");
+        break;
+      }
+
+      // For negative start, BigQuery matches Oracle.
+      switch (library) {
+      case BIG_QUERY:
+      case MYSQL:
+      case ORACLE:
+        assertReturns("abc", -2, "bc");
+        assertReturns("abc", -1, "c");
+        assertReturns("abc", -2, 1, "b");
+        assertReturns("abc", -2, 2, "bc");
+        assertReturns("abc", -2, 3, "bc");
+        assertReturns("abc", -2, 4, "bc");
+        assertReturns("abc", -2, 5, "bc");
+        assertReturns("abc", -2, 6, "bc");
+        assertReturns("abc", -2, 7, "bc");
+        assertReturns("abcde", -3, 2, "cd");
+        assertReturns("abc", -3, 3, "abc");
+        assertReturns("abc", -3, 8, "abc");
+        assertReturns("abc", -1, 4, "c");
+        break;
+      case POSTGRESQL:
+        assertReturns("abc", -2, "abc");
+        assertReturns("abc", -1, "abc");
+        assertReturns("abc", -2, 1, "");
+        assertReturns("abc", -2, 2, "");
+        assertReturns("abc", -2, 3, "");
+        assertReturns("abc", -2, 4, "a");
+        assertReturns("abc", -2, 5, "ab");
+        assertReturns("abc", -2, 6, "abc");
+        assertReturns("abc", -2, 7, "abc");
+        assertReturns("abcde", -3, 2, "");
+        assertReturns("abc", -3, 3, "");
+        assertReturns("abc", -3, 8, "abc");
+        assertReturns("abc", -1, 4, "ab");
+        break;
+      }
+
+      // For negative start and start + length between 0 and actual-length,
+      // confusion reigns.
+      switch (library) {
+      case BIG_QUERY:
+        assertReturns("abc", -4, 6, "abc");
+        break;
+      case MYSQL:
+      case ORACLE:
+        assertReturns("abc", -4, 6, "");
+        break;
+      case POSTGRESQL:
+        assertReturns("abc", -4, 6, "a");
+        break;
+      }
+      // For very negative start, BigQuery differs from Oracle and PostgreSQL.
+      switch (library) {
+      case BIG_QUERY:
+        assertReturns("abc", -4, 3, "abc");
+        assertReturns("abc", -5, 1, "abc");
+        assertReturns("abc", -10, 2, "abc");
+        assertReturns("abc", -500, 1, "abc");
+        break;
+      case MYSQL:
+      case ORACLE:
+      case POSTGRESQL:
+        assertReturns("abc", -4, 3, "");
+        assertReturns("abc", -5, 1, "");
+        assertReturns("abc", -10, 2, "");
+        assertReturns("abc", -500, 1, "");
+        break;
+      }
+    }
+
+    void assertReturns(String s, int start, String expected) {
+      assertSubFunReturns(false, s, start, null, expected);
+      assertSubFunReturns(true, s, start, null, expected);
+    }
+
+    void assertReturns(String s, int start, @Nullable Integer end,
+        @Nullable String expected) {
+      assertSubFunReturns(false, s, start, end, expected);
+      assertSubFunReturns(true, s, start, end, expected);
+    }
+
+    void assertSubFunReturns(boolean binary, String s, int start,
+        @Nullable Integer end, @Nullable String expected) {
+      final String v = binary
+          ? "x'" + DOUBLER.apply(s) + "'"
+          : "'" + s + "'";
+      final String type =
+          (binary ? "VARBINARY" : "VARCHAR") + "(" + s.length() + ")";
+      final String value = "CAST(" + v + " AS " + type + ")";
+      final String expression;
+      if (function == SqlStdOperatorTable.SUBSTRING) {
+        expression = "substring(" + value + " FROM " + start
+            + (end == null ? "" : (" FOR " + end)) + ")";
+      } else {
+        expression = "substr(" + value + ", " + start
+            + (end == null ? "" : (", " + end)) + ")";
+      }
+      if (expected == null) {
+        t.checkFails(expression,
+            "Substring error: negative substring length not allowed", true);
+      } else {
+        if (binary) {
+          expected = DOUBLER.apply(expected);
+        }
+        t.checkString(expression, expected, type + " NOT NULL");
+      }
+    }
   }
 
   @Test void testTrimFunc() {
@@ -7127,6 +7459,43 @@ public abstract class SqlOperatorBaseTest {
         false);
     t.checkAggFails("^string_agg(x, ',' order by x desc)^", values,
         "No match found for function signature STRING_AGG\\(<CHARACTER>, "
+            + "<CHARACTER>\\)",
+        false);
+  }
+
+  @Test void testGroupConcatFunc() {
+    checkGroupConcatFunc(libraryTester(SqlLibrary.MYSQL));
+    checkGroupConcatFuncFails(libraryTester(SqlLibrary.BIG_QUERY));
+    checkGroupConcatFuncFails(libraryTester(SqlLibrary.POSTGRESQL));
+  }
+
+  private void checkGroupConcatFunc(SqlTester t) {
+    final String[] values = {"'x'", "null", "'yz'"};
+    t.checkAgg("group_concat(x)", values, "x,yz", 0);
+    t.checkAgg("group_concat(x,':')", values, "x:yz", 0);
+    t.checkAgg("group_concat(x,':' order by x)", values, "x:yz", 0);
+    t.checkAgg("group_concat(x order by x separator '|')", values, "x|yz", 0);
+    t.checkAgg("group_concat(x order by char_length(x) desc)", values,
+        "yz,x", 0);
+    t.checkAggFails("^group_concat(x respect nulls order by x desc)^", values,
+        "Cannot specify IGNORE NULLS or RESPECT NULLS following 'GROUP_CONCAT'",
+        false);
+    t.checkAggFails("^group_concat(x order by x desc)^ respect nulls", values,
+        "Cannot specify IGNORE NULLS or RESPECT NULLS following 'GROUP_CONCAT'",
+        false);
+  }
+
+  private void checkGroupConcatFuncFails(SqlTester t) {
+    final String[] values = {"'x'", "'y'"};
+    t.checkAggFails("^group_concat(x)^", values,
+        "No match found for function signature GROUP_CONCAT\\(<CHARACTER>\\)",
+        false);
+    t.checkAggFails("^group_concat(x, ',')^", values,
+        "No match found for function signature GROUP_CONCAT\\(<CHARACTER>, "
+            + "<CHARACTER>\\)",
+        false);
+    t.checkAggFails("^group_concat(x, ',' order by x desc)^", values,
+        "No match found for function signature GROUP_CONCAT\\(<CHARACTER>, "
             + "<CHARACTER>\\)",
         false);
   }

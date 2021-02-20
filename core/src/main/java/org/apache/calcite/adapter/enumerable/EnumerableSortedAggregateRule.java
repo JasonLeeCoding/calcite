@@ -25,10 +25,11 @@ import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.util.ImmutableIntList;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
- * Rule to convert a {@link LogicalAggregate}
- * to an {@link EnumerableSortedAggregate}.
+ * Rule to convert a {@link LogicalAggregate} to an {@link EnumerableSortedAggregate}.
+ * You may provide a custom config to convert other nodes that extend {@link Aggregate}.
  *
  * @see EnumerableRules#ENUMERABLE_SORTED_AGGREGATE_RULE
  */
@@ -44,8 +45,8 @@ class EnumerableSortedAggregateRule extends ConverterRule {
     super(config);
   }
 
-  @Override public RelNode convert(RelNode rel) {
-    final LogicalAggregate agg = (LogicalAggregate) rel;
+  @Override public @Nullable RelNode convert(RelNode rel) {
+    final Aggregate agg = (Aggregate) rel;
     if (!Aggregate.isSimple(agg)) {
       return null;
     }

@@ -20,13 +20,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.Nullable;
 
 /**
  * Hint attached to a relation expression.
@@ -102,8 +103,8 @@ public class RelHint {
       String hintName,
       @Nullable List<String> listOption,
       @Nullable Map<String, String> kvOptions) {
-    Objects.requireNonNull(inheritPath);
-    Objects.requireNonNull(hintName);
+    Objects.requireNonNull(inheritPath, "inheritPath");
+    Objects.requireNonNull(hintName, "hintName");
     this.inheritPath = ImmutableList.copyOf(inheritPath);
     this.hintName = hintName;
     this.listOptions = listOption == null ? ImmutableList.of() : ImmutableList.copyOf(listOption);
@@ -124,11 +125,11 @@ public class RelHint {
    * @return the new {@code RelHint}
    */
   public RelHint copy(List<Integer> inheritPath) {
-    Objects.requireNonNull(inheritPath);
+    Objects.requireNonNull(inheritPath, "inheritPath");
     return new RelHint(inheritPath, hintName, listOptions, kvOptions);
   }
 
-  @Override public boolean equals(Object o) {
+  @Override public boolean equals(@Nullable Object o) {
     if (this == o) {
       return true;
     }
@@ -184,7 +185,7 @@ public class RelHint {
 
     /** Sets up the inherit path with given integer list. */
     public Builder inheritPath(Iterable<Integer> inheritPath) {
-      this.inheritPath = ImmutableList.copyOf(Objects.requireNonNull(inheritPath));
+      this.inheritPath = ImmutableList.copyOf(Objects.requireNonNull(inheritPath, "inheritPath"));
       return this;
     }
 
@@ -196,7 +197,7 @@ public class RelHint {
 
     /** Add a hint option as string. */
     public Builder hintOption(String hintOption) {
-      Objects.requireNonNull(hintOption);
+      Objects.requireNonNull(hintOption, "hintOption");
       Preconditions.checkState(this.kvOptions.size() == 0,
           "List options and key value options can not be mixed in");
       this.listOptions.add(hintOption);
@@ -205,7 +206,7 @@ public class RelHint {
 
     /** Add multiple string hint options. */
     public Builder hintOptions(Iterable<String> hintOptions) {
-      Objects.requireNonNull(hintOptions);
+      Objects.requireNonNull(hintOptions, "hintOptions");
       Preconditions.checkState(this.kvOptions.size() == 0,
           "List options and key value options can not be mixed in");
       this.listOptions = ImmutableList.copyOf(hintOptions);
@@ -214,8 +215,8 @@ public class RelHint {
 
     /** Add a hint option as string key-value pair. */
     public Builder hintOption(String optionKey, String optionValue) {
-      Objects.requireNonNull(optionKey);
-      Objects.requireNonNull(optionValue);
+      Objects.requireNonNull(optionKey, "optionKey");
+      Objects.requireNonNull(optionValue, "optionValue");
       Preconditions.checkState(this.listOptions.size() == 0,
           "List options and key value options can not be mixed in");
       this.kvOptions.put(optionKey, optionValue);
@@ -224,7 +225,7 @@ public class RelHint {
 
     /** Add multiple string key-value pair hint options. */
     public Builder hintOptions(Map<String, String> kvOptions) {
-      Objects.requireNonNull(kvOptions);
+      Objects.requireNonNull(kvOptions, "kvOptions");
       Preconditions.checkState(this.listOptions.size() == 0,
           "List options and key value options can not be mixed in");
       this.kvOptions = kvOptions;

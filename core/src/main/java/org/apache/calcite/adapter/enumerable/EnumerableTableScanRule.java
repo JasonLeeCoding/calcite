@@ -20,13 +20,15 @@ import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
+import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.apache.calcite.schema.QueryableTable;
 import org.apache.calcite.schema.Table;
 
-/** Planner rule that converts a
- * {@link org.apache.calcite.rel.logical.LogicalTableScan} to
- * {@link EnumerableConvention enumerable calling convention}.
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+/** Planner rule that converts a {@link LogicalTableScan} to an {@link EnumerableTableScan}.
+ * You may provide a custom config to convert other nodes that extend {@link TableScan}.
  *
  * @see EnumerableRules#ENUMERABLE_TABLE_SCAN_RULE */
 public class EnumerableTableScanRule extends ConverterRule {
@@ -43,8 +45,8 @@ public class EnumerableTableScanRule extends ConverterRule {
     super(config);
   }
 
-  @Override public RelNode convert(RelNode rel) {
-    LogicalTableScan scan = (LogicalTableScan) rel;
+  @Override public @Nullable RelNode convert(RelNode rel) {
+    TableScan scan = (TableScan) rel;
     final RelOptTable relOptTable = scan.getTable();
     final Table table = relOptTable.unwrap(Table.class);
     // The QueryableTable can only be implemented as ENUMERABLE convention,

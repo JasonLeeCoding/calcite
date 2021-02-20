@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.linq4j;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,14 +28,15 @@ import java.util.Objects;
  * @param <K> Key type
  * @param <V> Value type
  */
-class GroupingImpl<K, V> extends AbstractEnumerable<V>
+@SuppressWarnings("type.argument.type.incompatible")
+class GroupingImpl<K extends Object, V> extends AbstractEnumerable<V>
     implements Grouping<K, V>, Map.Entry<K, Enumerable<V>> {
   private final K key;
   private final List<V> values;
 
   GroupingImpl(K key, List<V> values) {
-    this.key = Objects.requireNonNull(key);
-    this.values = Objects.requireNonNull(values);
+    this.key = Objects.requireNonNull(key, "key");
+    this.values = Objects.requireNonNull(values, "values");
   }
 
   @Override public String toString() {
@@ -48,7 +51,7 @@ class GroupingImpl<K, V> extends AbstractEnumerable<V>
     return key.hashCode() ^ values.hashCode();
   }
 
-  @Override public boolean equals(Object obj) {
+  @Override public boolean equals(@Nullable Object obj) {
     return obj instanceof GroupingImpl
            && key.equals(((GroupingImpl) obj).key)
            && values.equals(((GroupingImpl) obj).values);

@@ -40,6 +40,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +72,7 @@ public abstract class Match extends SingleRel {
   protected final ImmutableMap<String, SortedSet<String>> subsets;
   protected final ImmutableBitSet partitionKeys;
   protected final RelCollation orderKeys;
-  protected final RexNode interval;
+  protected final @Nullable RexNode interval;
 
   //~ Constructors -----------------------------------------------
 
@@ -99,20 +101,20 @@ public abstract class Match extends SingleRel {
       Map<String, RexNode> patternDefinitions, Map<String, RexNode> measures,
       RexNode after, Map<String, ? extends SortedSet<String>> subsets,
       boolean allRows, ImmutableBitSet partitionKeys, RelCollation orderKeys,
-      RexNode interval) {
+      @Nullable RexNode interval) {
     super(cluster, traitSet, input);
-    this.rowType = Objects.requireNonNull(rowType);
-    this.pattern = Objects.requireNonNull(pattern);
+    this.rowType = Objects.requireNonNull(rowType, "rowType");
+    this.pattern = Objects.requireNonNull(pattern, "pattern");
     Preconditions.checkArgument(patternDefinitions.size() > 0);
     this.strictStart = strictStart;
     this.strictEnd = strictEnd;
     this.patternDefinitions = ImmutableMap.copyOf(patternDefinitions);
     this.measures = ImmutableMap.copyOf(measures);
-    this.after = Objects.requireNonNull(after);
+    this.after = Objects.requireNonNull(after, "after");
     this.subsets = copyMap(subsets);
     this.allRows = allRows;
-    this.partitionKeys = Objects.requireNonNull(partitionKeys);
-    this.orderKeys = Objects.requireNonNull(orderKeys);
+    this.partitionKeys = Objects.requireNonNull(partitionKeys, "partitionKeys");
+    this.orderKeys = Objects.requireNonNull(orderKeys, "orderKeys");
     this.interval = interval;
 
     final AggregateFinder aggregateFinder = new AggregateFinder();
@@ -187,7 +189,7 @@ public abstract class Match extends SingleRel {
     return orderKeys;
   }
 
-  public RexNode getInterval() {
+  public @Nullable RexNode getInterval() {
     return interval;
   }
 
@@ -334,7 +336,7 @@ public abstract class Match extends SingleRel {
       return toString().compareTo(o.toString());
     }
 
-    @Override public boolean equals(Object obj) {
+    @Override public boolean equals(@Nullable Object obj) {
       return obj == this
           || obj instanceof RexMRAggCall
           && toString().equals(obj.toString());

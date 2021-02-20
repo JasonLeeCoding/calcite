@@ -82,6 +82,7 @@ import net.hydromatic.foodmart.data.hsqldb.FoodmartHsqldb;
 import net.hydromatic.scott.data.hsqldb.ScottHsqldb;
 
 import org.apiguardian.api.API;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.hamcrest.Matcher;
 
 import java.lang.reflect.InvocationTargetException;
@@ -111,8 +112,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.sql.DataSource;
 
 import static org.apache.calcite.test.Matchers.compose;
@@ -1035,7 +1034,7 @@ public class CalciteAssert {
         new AssertThat(EMPTY_CONNECTION_FACTORY);
 
     private AssertThat(ConnectionFactory connectionFactory) {
-      this.connectionFactory = Objects.requireNonNull(connectionFactory);
+      this.connectionFactory = Objects.requireNonNull(connectionFactory, "connectionFactory");
     }
 
     public AssertThat with(Config config) {
@@ -1312,8 +1311,8 @@ public class CalciteAssert {
     private final Schema schema;
 
     public AddSchemaPostProcessor(String name, Schema schema) {
-      this.name = Objects.requireNonNull(name);
-      this.schema = Objects.requireNonNull(schema);
+      this.name = Objects.requireNonNull(name, "name");
+      this.schema = Objects.requireNonNull(schema, "schema");
     }
 
     public Connection apply(Connection connection) throws SQLException {
@@ -1393,8 +1392,8 @@ public class CalciteAssert {
 
     private MapConnectionFactory(ImmutableMap<String, String> map,
         ImmutableList<ConnectionPostProcessor> postProcessors) {
-      this.map = Objects.requireNonNull(map);
-      this.postProcessors = Objects.requireNonNull(postProcessors);
+      this.map = Objects.requireNonNull(map, "map");
+      this.postProcessors = Objects.requireNonNull(postProcessors, "postProcessors");
     }
 
     @Override public boolean equals(Object obj) {
@@ -1736,7 +1735,7 @@ public class CalciteAssert {
       return planContains(checkUpdateCount(count), JavaSql.fromSql(expected));
     }
 
-    @Nonnull private AssertQuery planContains(Consumer<Integer> checkUpdate,
+    private AssertQuery planContains(Consumer<Integer> checkUpdate,
         JavaSql expected) {
       ensurePlan(checkUpdate);
       if (expected.sql != null) {
@@ -2165,7 +2164,7 @@ public class CalciteAssert {
     private final String sql;
 
     JavaSql(String java, String sql) {
-      this.java = Objects.requireNonNull(java);
+      this.java = Objects.requireNonNull(java, "java");
       this.sql = sql;
     }
 
@@ -2190,7 +2189,7 @@ public class CalciteAssert {
       return unwrap(java);
     }
 
-    static @Nonnull List<String> unwrap(String java) {
+    static List<String> unwrap(String java) {
       final List<String> sqlList = new ArrayList<>();
       final StringBuilder b = new StringBuilder();
       hLoop:

@@ -39,10 +39,11 @@ import org.apache.calcite.util.ImmutableBitSet;
 
 import com.google.common.collect.ImmutableList;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.Nullable;
 
 /**
  * Rule that converts CASE-style filtered aggregates into true filtered
@@ -149,7 +150,7 @@ public class AggregateCaseToFilterRule
     call.getPlanner().prune(aggregate);
   }
 
-  private @Nullable AggregateCall transform(AggregateCall aggregateCall,
+  private static @Nullable AggregateCall transform(AggregateCall aggregateCall,
       Project project, List<RexNode> newProjects) {
     final int singleArg = soleArgument(aggregateCall);
     if (singleArg < 0) {
@@ -201,7 +202,7 @@ public class AggregateCaseToFilterRule
         newProjects.add(filter);
         return AggregateCall.create(SqlStdOperatorTable.COUNT, true, false,
             false, ImmutableList.of(newProjects.size() - 2),
-            newProjects.size() - 1, RelCollations.EMPTY,
+            newProjects.size() - 1, null, RelCollations.EMPTY,
             aggregateCall.getType(), aggregateCall.getName());
       }
       return null;
@@ -224,7 +225,7 @@ public class AggregateCaseToFilterRule
         && RexLiteral.isNullLiteral(arg2)) {
       newProjects.add(filter);
       return AggregateCall.create(SqlStdOperatorTable.COUNT, false, false,
-          false, ImmutableList.of(), newProjects.size() - 1,
+          false, ImmutableList.of(), newProjects.size() - 1, null,
           RelCollations.EMPTY, aggregateCall.getType(),
           aggregateCall.getName());
     } else if (kind == SqlKind.SUM // Case B
@@ -237,7 +238,7 @@ public class AggregateCaseToFilterRule
           typeFactory.createTypeWithNullability(
               typeFactory.createSqlType(SqlTypeName.BIGINT), false);
       return AggregateCall.create(SqlStdOperatorTable.COUNT, false, false,
-          false, ImmutableList.of(), newProjects.size() - 1,
+          false, ImmutableList.of(), newProjects.size() - 1, null,
           RelCollations.EMPTY, dataType, aggregateCall.getName());
     } else if ((RexLiteral.isNullLiteral(arg2) // Case A1
             && aggregateCall.getAggregation().allowsFilter())
@@ -247,7 +248,7 @@ public class AggregateCaseToFilterRule
       newProjects.add(filter);
       return AggregateCall.create(aggregateCall.getAggregation(), false,
           false, false, ImmutableList.of(newProjects.size() - 2),
-          newProjects.size() - 1, RelCollations.EMPTY,
+          newProjects.size() - 1, null, RelCollations.EMPTY,
           aggregateCall.getType(), aggregateCall.getName());
     } else {
       return null;

@@ -52,6 +52,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.apache.calcite.linq4j.Nullness.castNonNull;
+
 /**
  * Utilities for creating {@link Program}s.
  */
@@ -79,6 +81,7 @@ public class Programs {
           EnumerableRules.ENUMERABLE_SORT_RULE,
           EnumerableRules.ENUMERABLE_LIMIT_RULE,
           EnumerableRules.ENUMERABLE_UNION_RULE,
+          EnumerableRules.ENUMERABLE_MERGE_UNION_RULE,
           EnumerableRules.ENUMERABLE_INTERSECT_RULE,
           EnumerableRules.ENUMERABLE_MINUS_RULE,
           EnumerableRules.ENUMERABLE_TABLE_MODIFICATION_RULE,
@@ -238,9 +241,10 @@ public class Programs {
     return of(builder.build(), true, metadataProvider);
   }
 
+  @Deprecated
   public static Program getProgram() {
     return (planner, rel, requiredOutputTraits, materializations, lattices) ->
-        null;
+        castNonNull(null);
   }
 
   /** Returns the standard program used by Prepare. */
@@ -347,9 +351,9 @@ public class Programs {
         RelTraitSet requiredOutputTraits,
         List<RelOptMaterialization> materializations,
         List<RelOptLattice> lattices) {
-      final CalciteConnectionConfig config = Util.first(
-          planner.getContext().unwrap(CalciteConnectionConfig.class),
-          CalciteConnectionConfig.DEFAULT);
+      final CalciteConnectionConfig config =
+          planner.getContext().maybeUnwrap(CalciteConnectionConfig.class)
+              .orElse(CalciteConnectionConfig.DEFAULT);
       if (config.forceDecorrelate()) {
         final RelBuilder relBuilder =
             RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);

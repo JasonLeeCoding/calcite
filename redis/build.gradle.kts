@@ -21,7 +21,6 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core")
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.github.kstyrc:embedded-redis")
-    implementation("com.google.code.findbugs:jsr305")
     implementation("com.google.guava:guava")
     implementation("joda-time:joda-time")
     implementation("org.apache.calcite.avatica:avatica-core")
@@ -34,4 +33,5 @@ dependencies {
     testImplementation("com.github.kstyrc:embedded-redis")
     testImplementation("org.mockito:mockito-core")
     testRuntimeOnly("org.slf4j:slf4j-log4j12")
+    testImplementation("org.testcontainers:testcontainers")
 }

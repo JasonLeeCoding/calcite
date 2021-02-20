@@ -81,8 +81,8 @@ class DruidConnectionImpl implements DruidConnection {
   }
 
   DruidConnectionImpl(String url, String coordinatorUrl) {
-    this.url = Objects.requireNonNull(url);
-    this.coordinatorUrl = Objects.requireNonNull(coordinatorUrl);
+    this.url = Objects.requireNonNull(url, "url");
+    this.coordinatorUrl = Objects.requireNonNull(coordinatorUrl, "coordinatorUrl");
   }
 
   /** Executes a query request.
@@ -114,7 +114,7 @@ class DruidConnectionImpl implements DruidConnection {
 
   /** Parses the output of a query, sending the results to a
    * {@link Sink}. */
-  private void parse(QueryType queryType, InputStream in, Sink sink,
+  private static void parse(QueryType queryType, InputStream in, Sink sink,
       List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes, Page page) {
     final JsonFactory factory = new JsonFactory();
     final Row.RowBuilder rowBuilder = Row.newBuilder(fieldNames.size());
@@ -294,26 +294,27 @@ class DruidConnectionImpl implements DruidConnection {
     }
   }
 
-  private void parseFields(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
+  private static void parseFields(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
       Row.RowBuilder rowBuilder, JsonParser parser) throws IOException {
     parseFields(fieldNames, fieldTypes, -1, rowBuilder, parser);
   }
 
-  private void parseFields(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
+  private static void parseFields(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
       int posTimestampField, Row.RowBuilder rowBuilder, JsonParser parser) throws IOException {
     while (parser.nextToken() == JsonToken.FIELD_NAME) {
       parseField(fieldNames, fieldTypes, posTimestampField, rowBuilder, parser);
     }
   }
 
-  private void parseField(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
+  private static void parseField(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
       int posTimestampField, Row.RowBuilder rowBuilder, JsonParser parser) throws IOException {
     final String fieldName = parser.getCurrentName();
     parseFieldForName(fieldNames, fieldTypes, posTimestampField, rowBuilder, parser, fieldName);
   }
 
   @SuppressWarnings("JdkObsolete")
-  private void parseFieldForName(List<String> fieldNames, List<ColumnMetaData.Rep> fieldTypes,
+  private static void parseFieldForName(List<String> fieldNames,
+      List<ColumnMetaData.Rep> fieldTypes,
       int posTimestampField, Row.RowBuilder rowBuilder, JsonParser parser, String fieldName)
       throws IOException {
     // Move to next token, which is name's value
@@ -452,17 +453,17 @@ class DruidConnectionImpl implements DruidConnection {
     }
   }
 
-  private void expect(JsonParser parser, JsonToken token) throws IOException {
+  private static void expect(JsonParser parser, JsonToken token) throws IOException {
     expect(parser.nextToken(), token);
   }
 
-  private void expect(JsonToken token, JsonToken expected) throws IOException {
+  private static void expect(JsonToken token, JsonToken expected) throws IOException {
     if (token != expected) {
       throw new RuntimeException("expected " + expected + ", got " + token);
     }
   }
 
-  private void expectScalarField(JsonParser parser, String name)
+  private static void expectScalarField(JsonParser parser, String name)
       throws IOException {
     expect(parser, JsonToken.FIELD_NAME);
     if (!parser.getCurrentName().equals(name)) {
@@ -484,7 +485,7 @@ class DruidConnectionImpl implements DruidConnection {
   }
 
   @SuppressWarnings("unused")
-  private void expectObjectField(JsonParser parser, String name)
+  private static void expectObjectField(JsonParser parser, String name)
       throws IOException {
     expect(parser, JsonToken.FIELD_NAME);
     if (!parser.getCurrentName().equals(name)) {
@@ -498,7 +499,7 @@ class DruidConnectionImpl implements DruidConnection {
   }
 
   @SuppressWarnings("JdkObsolete")
-  private Long extractTimestampField(JsonParser parser)
+  private static Long extractTimestampField(JsonParser parser)
       throws IOException {
     expect(parser, JsonToken.FIELD_NAME);
     if (!parser.getCurrentName().equals(DEFAULT_RESPONSE_TIMESTAMP_COLUMN)) {
@@ -651,7 +652,7 @@ class DruidConnectionImpl implements DruidConnection {
     }
   }
 
-  private InputStream traceResponse(InputStream in) {
+  private static InputStream traceResponse(InputStream in) {
     if (CalciteSystemProperty.DEBUG.value()) {
       try {
         final byte[] bytes = AvaticaUtils.readFullyToBytes(in);
@@ -677,7 +678,7 @@ class DruidConnectionImpl implements DruidConnection {
   private static class BlockingQueueEnumerator<E> implements Enumerator<E> {
     final BlockingQueue<E> queue = new ArrayBlockingQueue<>(1000);
     final AtomicBoolean done = new AtomicBoolean(false);
-    final Holder<Throwable> throwableHolder = Holder.of(null);
+    final Holder<Throwable> throwableHolder = Holder.empty();
 
     E next;
 

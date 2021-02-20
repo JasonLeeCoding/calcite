@@ -24,6 +24,8 @@ import org.apache.calcite.rel.type.RelDataType;
 import com.google.common.base.Equivalence;
 import com.google.common.collect.Lists;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -64,17 +66,17 @@ public abstract class MutableRel {
   public final RelDataType rowType;
   protected final MutableRelType type;
 
-  protected MutableRel parent;
+  protected @Nullable MutableRel parent;
   protected int ordinalInParent;
 
   protected MutableRel(RelOptCluster cluster,
       RelDataType rowType, MutableRelType type) {
-    this.cluster = Objects.requireNonNull(cluster);
-    this.rowType = Objects.requireNonNull(rowType);
-    this.type = Objects.requireNonNull(type);
+    this.cluster = Objects.requireNonNull(cluster, "cluster");
+    this.rowType = Objects.requireNonNull(rowType, "rowType");
+    this.type = Objects.requireNonNull(type, "type");
   }
 
-  public MutableRel getParent() {
+  public @Nullable MutableRel getParent() {
     return parent;
   }
 
@@ -94,7 +96,7 @@ public abstract class MutableRel {
    *
    * @return The parent
    */
-  public MutableRel replaceInParent(MutableRel child) {
+  public @Nullable MutableRel replaceInParent(MutableRel child) {
     final MutableRel parent = this.parent;
     if (this != child) {
       if (parent != null) {
@@ -124,7 +126,7 @@ public abstract class MutableRel {
     private final StringBuilder buf = new StringBuilder();
     private int level;
 
-    @Override public void visit(MutableRel node) {
+    @Override public void visit(@Nullable MutableRel node) {
       Spaces.append(buf, level * 2);
       if (node == null) {
         buf.append("null");

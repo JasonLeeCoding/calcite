@@ -21,8 +21,9 @@ import org.apache.calcite.rel.convert.ConverterRule;
 
 import com.google.common.collect.ImmutableSet;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.Objects;
-import javax.annotation.Nullable;
 
 /**
  * Represents a hint strategy entry of {@link HintStrategyTable}.
@@ -47,7 +48,7 @@ public class HintStrategy {
   //~ Instance fields --------------------------------------------------------
 
   public final HintPredicate predicate;
-  public final HintOptionChecker hintOptionChecker;
+  public final @Nullable HintOptionChecker hintOptionChecker;
   public final ImmutableSet<RelOptRule> excludedRules;
   public final ImmutableSet<ConverterRule> converterRules;
 
@@ -55,7 +56,7 @@ public class HintStrategy {
 
   private HintStrategy(
       HintPredicate predicate,
-      HintOptionChecker hintOptionChecker,
+      @Nullable HintOptionChecker hintOptionChecker,
       ImmutableSet<RelOptRule> excludedRules,
       ImmutableSet<ConverterRule> converterRules) {
     this.predicate = predicate;
@@ -79,20 +80,19 @@ public class HintStrategy {
   /** Builder for {@link HintStrategy}. */
   public static class Builder {
     private final HintPredicate predicate;
-    @Nullable
-    private HintOptionChecker optionChecker;
+    private @Nullable HintOptionChecker optionChecker;
     private ImmutableSet<RelOptRule> excludedRules;
     private ImmutableSet<ConverterRule> converterRules;
 
     private Builder(HintPredicate predicate) {
-      this.predicate = Objects.requireNonNull(predicate);
+      this.predicate = Objects.requireNonNull(predicate, "predicate");
       this.excludedRules = ImmutableSet.of();
       this.converterRules = ImmutableSet.of();
     }
 
     /** Registers a hint option checker to validate the hint options. */
     public Builder optionChecker(HintOptionChecker optionChecker) {
-      this.optionChecker = Objects.requireNonNull(optionChecker);
+      this.optionChecker = Objects.requireNonNull(optionChecker, "optionChecker");
       return this;
     }
 

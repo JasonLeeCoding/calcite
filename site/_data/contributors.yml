@@ -89,7 +89,7 @@
   apacheId: hyuan
   githubId: hsyuan
   org: Alibaba
-  role: PMC
+  role: PMC Chair
 - name: Hongze Zhang
   apacheId: hongze
   githubId: zhztheplayer
@@ -161,6 +161,11 @@
   githubId: laurentgo
   org: Dremio
   role: PMC
+- name: Liya Fan
+  apacheId: liyafan
+  githubId: liyafan82
+  org: Alibaba
+  role: Committer
 - name: Maryann Xue
   apacheId: maryannxue
   githubId: maryannxue
@@ -228,7 +233,7 @@
   apacheId: zabetak
   githubId: zabetak
   org: Cloudera
-  role: PMC Chair
+  role: PMC
   homepage: https://people.apache.org/~zabetak/
 - name: Steven Noels
   apacheId: stevenn

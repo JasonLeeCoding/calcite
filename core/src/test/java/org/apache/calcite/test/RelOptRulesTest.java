@@ -60,6 +60,7 @@ import org.apache.calcite.rel.logical.LogicalCorrelate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalTableModify;
+import org.apache.calcite.rel.rules.AggregateExpandWithinDistinctRule;
 import org.apache.calcite.rel.rules.AggregateExtractProjectRule;
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule;
@@ -88,6 +89,7 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.runtime.Hook;
@@ -123,6 +125,7 @@ import com.google.common.collect.ImmutableMap;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1517,6 +1520,53 @@ class RelOptRulesTest extends RelOptTestBase {
     sql(sql)
         .withRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES)
         .check();
+  }
+
+  /** Tests {@link AggregateExpandWithinDistinctRule}. The generated query
+   * throws if arguments are not functionally dependent on the distinct key. */
+  @Test void testWithinDistinct() {
+    final String sql = "SELECT deptno, SUM(sal), SUM(sal) WITHIN DISTINCT (job)\n"
+        + "FROM emp\n"
+        + "GROUP BY deptno";
+    HepProgram program = new HepProgramBuilder()
+        .addRuleInstance(CoreRules.AGGREGATE_REDUCE_FUNCTIONS)
+        .addRuleInstance(CoreRules.AGGREGATE_EXPAND_WITHIN_DISTINCT)
+        .build();
+    sql(sql).with(program).check();
+  }
+
+  /** As {@link #testWithinDistinct()}, but the generated query does not throw
+   * if arguments are not functionally dependent on the distinct key.
+   *
+   * @see AggregateExpandWithinDistinctRule.Config#throwIfNotUnique() */
+  @Test void testWithinDistinctNoThrow() {
+    final String sql = "SELECT deptno, SUM(sal), SUM(sal) WITHIN DISTINCT (job)\n"
+        + "FROM emp\n"
+        + "GROUP BY deptno";
+    HepProgram program = new HepProgramBuilder()
+        .addRuleInstance(CoreRules.AGGREGATE_REDUCE_FUNCTIONS)
+        .addRuleInstance(CoreRules.AGGREGATE_EXPAND_WITHIN_DISTINCT
+            .config.withThrowIfNotUnique(false).toRule())
+        .build();
+    sql(sql).with(program).check();
+  }
+
+  /** Tests that {@link AggregateExpandWithinDistinctRule} treats
+   * "COUNT(DISTINCT x)" as if it were "COUNT(x) WITHIN DISTINCT (x)". */
+  @Test void testWithinDistinctCountDistinct() {
+    final String sql = "SELECT deptno,\n"
+        + "  SUM(sal) WITHIN DISTINCT (job) AS ss_j,\n"
+        + "  COUNT(DISTINCT job) cdj,\n"
+        + "  COUNT(job) WITHIN DISTINCT (job) AS cj_j,\n"
+        + "  COUNT(DISTINCT job) WITHIN DISTINCT (job) AS cdj_j\n"
+        + "FROM emp\n"
+        + "GROUP BY deptno";
+    HepProgram program = new HepProgramBuilder()
+        .addRuleInstance(CoreRules.AGGREGATE_REDUCE_FUNCTIONS)
+        .addRuleInstance(CoreRules.AGGREGATE_EXPAND_WITHIN_DISTINCT
+            .config.withThrowIfNotUnique(false).toRule())
+        .build();
+    sql(sql).with(program).check();
   }
 
   @Test void testPushProjectPastFilter() {
@@ -3511,9 +3561,9 @@ class RelOptRulesTest extends RelOptTestBase {
     RelNode left = relBuilder
         .values(new String[]{"x", "y"}, 1, 2).build();
     RexNode ref = rexBuilder.makeInputRef(left, 0);
-    RexNode literal1 = rexBuilder.makeLiteral(1, type, false);
-    RexNode literal2 = rexBuilder.makeLiteral(2, type, false);
-    RexNode literal3 = rexBuilder.makeLiteral(3, type, false);
+    RexLiteral literal1 = rexBuilder.makeLiteral(1, type);
+    RexLiteral literal2 = rexBuilder.makeLiteral(2, type);
+    RexLiteral literal3 = rexBuilder.makeLiteral(3, type);
 
     // CASE WHEN x % 2 = 1 THEN x < 2
     //      WHEN x % 3 = 2 THEN x < 1
@@ -6832,6 +6882,62 @@ class RelOptRulesTest extends RelOptTestBase {
         .withTester(t -> createDynamicTester())
         .withRule(projectJoinTransposeRule)
         .check();
+  }
+
+  /**
+   * Test case for
+   * <a href="https://issues.apache.org/jira/browse/CALCITE-4317">[CALCITE-4317]
+   * RelFieldTrimmer after trimming all the fields in an aggregate
+   * should not return a zero field Aggregate</a>. */
+  @Test void testProjectJoinTransposeRuleOnAggWithNoFieldsWithTrimmer() {
+    final RelBuilder relBuilder = RelBuilder.create(RelBuilderTest.config().build());
+    // Build a rel equivalent to sql:
+    // SELECT name FROM (SELECT count(*) cnt_star, count(empno) cnt_en FROM sales.emp)
+    // cross join sales.dept
+    // limit 10
+
+    RelNode left = relBuilder.scan("DEPT").build();
+    RelNode right = relBuilder.scan("EMP")
+        .project(
+            ImmutableList.of(relBuilder.getRexBuilder().makeExactLiteral(BigDecimal.ZERO)),
+            ImmutableList.of("DUMMY"))
+        .aggregate(
+            relBuilder.groupKey(),
+            relBuilder.count(relBuilder.field(0)).as("DUMMY_COUNT"))
+        .build();
+
+    RelNode plan = relBuilder.push(left)
+        .push(right)
+        .join(JoinRelType.INNER,
+            relBuilder.getRexBuilder().makeLiteral(true))
+        .project(relBuilder.field("DEPTNO"))
+        .build();
+
+    final String planBeforeTrimming = NL + RelOptUtil.toString(plan);
+    getDiffRepos().assertEquals("planBeforeTrimming", "${planBeforeTrimming}", planBeforeTrimming);
+
+    VolcanoPlanner planner = new VolcanoPlanner(null, null);
+    planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.addRelTraitDef(RelDistributionTraitDef.INSTANCE);
+    Tester tester = createDynamicTester()
+        .withTrim(true)
+        .withClusterFactory(
+            relOptCluster -> RelOptCluster.create(planner, relOptCluster.getRexBuilder()));
+
+    plan = tester.trimRelNode(plan);
+
+    final String planAfterTrimming = NL + RelOptUtil.toString(plan);
+    getDiffRepos().assertEquals("planAfterTrimming", "${planAfterTrimming}", planAfterTrimming);
+
+    HepProgram program = new HepProgramBuilder()
+        .addRuleInstance(CoreRules.PROJECT_JOIN_TRANSPOSE)
+        .build();
+
+    HepPlanner hepPlanner = new HepPlanner(program);
+    hepPlanner.setRoot(plan);
+    RelNode output = hepPlanner.findBestExp();
+    final String finalPlan = NL + RelOptUtil.toString(output);
+    getDiffRepos().assertEquals("finalPlan", "${finalPlan}", finalPlan);
   }
 
   @Test void testSimplifyItemIsNotNull() {

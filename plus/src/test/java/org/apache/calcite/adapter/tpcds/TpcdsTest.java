@@ -32,6 +32,7 @@ import org.apache.calcite.util.Holder;
 
 import net.hydromatic.tpcds.query.Query;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -301,7 +302,7 @@ class TpcdsTest {
   }
 
   public Frameworks.ConfigBuilder config() throws Exception {
-    final Holder<SchemaPlus> root = Holder.of(null);
+    final Holder<@Nullable SchemaPlus> root = Holder.empty();
     CalciteAssert.model(TPCDS_MODEL)
         .doWithConnection(connection -> {
           root.set(connection.getRootSchema().getSubSchema("TPCDS"));
@@ -384,11 +385,9 @@ class TpcdsTest {
         + "LogicalSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC], fetch=[100])\n"
         + "  LogicalAggregate(group=[{84, 90}], AGG1=[AVG($10)], AGG2=[AVG($12)], AGG3=[AVG($19)], AGG4=[AVG($13)])\n"
         + "    LogicalFilter(condition=[AND(=($0, $32), =($2, $89), "
-        + "=($7, $60), =($4, $23), SEARCH($24, Sarg['M']:CHAR(1)), "
-        + "SEARCH($25, Sarg['S']:CHAR(1)), "
-        + "SEARCH($26, Sarg['HIGH SCHOOL']:CHAR(11)), "
-        + "SEARCH($38, Sarg[1998]), SEARCH($84, Sarg['CA', 'MD', 'OK', 'OR', "
-        + "'TX', 'WA']:CHAR(2)))])\n"
+        + "=($7, $60), =($4, $23), =($24, 'M'), "
+        + "=($25, 'S'), =($26, 'HIGH SCHOOL'), =($38, 1998), "
+        + "SEARCH($84, Sarg['CA', 'MD', 'OK', 'OR', 'TX', 'WA']:CHAR(2)))])\n"
         + "      LogicalJoin(condition=[true], joinType=[inner])\n"
         + "        LogicalTableScan(table=[[TPCDS, STORE_SALES]])\n"
         + "        LogicalJoin(condition=[true], joinType=[inner])\n"

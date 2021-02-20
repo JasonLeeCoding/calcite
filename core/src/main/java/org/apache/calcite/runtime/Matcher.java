@@ -24,6 +24,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -56,7 +58,7 @@ public class Matcher<E> {
    */
   private Matcher(Automaton automaton,
       ImmutableMap<String, Predicate<MemoryFactory.Memory<E>>> predicates) {
-    this.predicates = Objects.requireNonNull(predicates);
+    this.predicates = Objects.requireNonNull(predicates, "predicates");
     final ImmutableBitSet.Builder startSetBuilder =
         ImmutableBitSet.builder();
     startSetBuilder.set(automaton.startState.id);
@@ -241,7 +243,7 @@ public class Matcher<E> {
       return new PartialMatch<>(startRow, symbols, rows, toState);
     }
 
-    @Override public boolean equals(Object o) {
+    @Override public boolean equals(@Nullable Object o) {
       return o == this
           || o instanceof PartialMatch
           && startRow == ((PartialMatch) o).startRow
@@ -331,7 +333,7 @@ public class Matcher<E> {
       this.row = row;
     }
 
-    @Override public boolean equals(Object o) {
+    @Override public boolean equals(@Nullable Object o) {
       return o == this
           || o instanceof Tuple
           && ((Tuple) o).symbol.equals(symbol)

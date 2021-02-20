@@ -18,12 +18,23 @@ package org.apache.calcite.sql.fun;
 
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.apache.calcite.sql.SqlInternalOperator;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlWriter;
+import org.apache.calcite.sql.type.InferTypes;
+import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.util.Litmus;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+import java.util.List;
 
 /**
  * Contains internal operators.
@@ -44,8 +55,10 @@ public abstract class SqlInternalOperators {
       new SqlRowOperator("$ANONYMOUS_ROW") {
         @Override public void unparse(SqlWriter writer, SqlCall call,
             int leftPrec, int rightPrec) {
+          @SuppressWarnings("assignment.type.incompatible")
+          List<@Nullable SqlNode> operandList = call.getOperandList();
           writer.list(SqlWriter.FrameTypeEnum.PARENTHESES, SqlWriter.COMMA,
-              SqlNodeList.of(call.getParserPosition(), call.getOperandList()));
+              SqlNodeList.of(call.getParserPosition(), operandList));
         }
       };
 
@@ -68,6 +81,11 @@ public abstract class SqlInternalOperators {
           writer.endList(frame);
         }
       };
+
+  /** "$THROW_UNLESS(condition, message)" throws an error with the given message
+   * if condition is not TRUE, otherwise returns TRUE. */
+  public static final SqlInternalOperator THROW_UNLESS =
+      new SqlInternalOperator("$THROW_UNLESS", SqlKind.OTHER);
 
   /** An IN operator for Druid.
    *
@@ -93,4 +111,18 @@ public abstract class SqlInternalOperators {
           return litmus.succeed();
         }
       };
+
+  /** Separator expression inside GROUP_CONCAT, e.g. '{@code SEPARATOR ','}'. */
+  public static final SqlOperator SEPARATOR =
+      new SqlInternalOperator("SEPARATOR", SqlKind.SEPARATOR, 20, false,
+          ReturnTypes.ARG0, InferTypes.RETURN_TYPE, OperandTypes.ANY);
+
+  /** All implementations of {@code SUBSTRING} and {@code SUBSTR} map onto
+   * this. */
+  // TODO:
+  public static final SqlFunction SUBSTRING_INTERNAL =
+      new SqlFunction("$SUBSTRING", SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE_VARYING, null,
+          OperandTypes.STRING_INTEGER_INTEGER, SqlFunctionCategory.SYSTEM);
+
 }

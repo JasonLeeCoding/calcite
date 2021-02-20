@@ -23,13 +23,14 @@ import org.apache.calcite.util.ImmutableBeans;
 
 import com.google.common.collect.ImmutableList;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import javax.annotation.Nonnull;
 
 /**
  * Rule that is parameterized via a configuration.
@@ -129,7 +130,7 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
     RelOptRule toRule();
 
     /** Casts this configuration to another type, usually a sub-class. */
-    default <T> T as(Class<T> class_) {
+    default <T extends Object> T as(Class<T> class_) {
       return ImmutableBeans.copy(class_, this);
     }
 
@@ -143,10 +144,10 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
 
     /** Description of the rule instance. */
     @ImmutableBeans.Property
-    String description();
+    @Nullable String description();
 
     /** Sets {@link #description()}. */
-    Config withDescription(String description);
+    Config withDescription(@Nullable String description);
 
     /** Creates the operands for the rule instance. */
     @ImmutableBeans.Property
@@ -187,7 +188,7 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
    * @param <R> Type of relational expression */
   public interface OperandDetailBuilder<R extends RelNode> {
     /** Sets a trait of this operand. */
-    OperandDetailBuilder<R> trait(@Nonnull RelTrait trait);
+    OperandDetailBuilder<R> trait(RelTrait trait);
 
     /** Sets the predicate of this operand. */
     OperandDetailBuilder<R> predicate(Predicate<? super R> predicate);
@@ -219,7 +220,7 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
     static RelOptRuleOperand operand(OperandTransform transform) {
       final OperandBuilderImpl b = new OperandBuilderImpl();
       final Done done = transform.apply(b);
-      Objects.requireNonNull(done);
+      Objects.requireNonNull(done, "done");
       if (b.operands.size() != 1) {
         throw new IllegalArgumentException("operand supplier must call one of "
             + "the following methods: operand or exactly");
@@ -245,16 +246,16 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
     private final OperandBuilderImpl parent;
     private final Class<R> relClass;
     final OperandBuilderImpl inputBuilder = new OperandBuilderImpl();
-    private RelTrait trait;
+    private @Nullable RelTrait trait;
     private Predicate<? super R> predicate = r -> true;
 
     OperandDetailBuilderImpl(OperandBuilderImpl parent, Class<R> relClass) {
-      this.parent = Objects.requireNonNull(parent);
-      this.relClass = Objects.requireNonNull(relClass);
+      this.parent = Objects.requireNonNull(parent, "parent");
+      this.relClass = Objects.requireNonNull(relClass, "relClass");
     }
 
-    @Override public OperandDetailBuilderImpl<R> trait(@Nonnull RelTrait trait) {
-      this.trait = Objects.requireNonNull(trait);
+    @Override public OperandDetailBuilderImpl<R> trait(RelTrait trait) {
+      this.trait = Objects.requireNonNull(trait, "trait");
       return this;
     }
 
@@ -287,14 +288,14 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
 
     @Override public Done oneInput(OperandTransform transform) {
       final Done done = transform.apply(inputBuilder);
-      Objects.requireNonNull(done);
+      Objects.requireNonNull(done, "done");
       return done(RelOptRuleOperandChildPolicy.SOME);
     }
 
     @Override public Done inputs(OperandTransform... transforms) {
       for (OperandTransform transform : transforms) {
         final Done done = transform.apply(inputBuilder);
-        Objects.requireNonNull(done);
+        Objects.requireNonNull(done, "done");
       }
       return done(RelOptRuleOperandChildPolicy.SOME);
     }
@@ -302,7 +303,7 @@ public abstract class RelRule<C extends RelRule.Config> extends RelOptRule {
     @Override public Done unorderedInputs(OperandTransform... transforms) {
       for (OperandTransform transform : transforms) {
         final Done done = transform.apply(inputBuilder);
-        Objects.requireNonNull(done);
+        Objects.requireNonNull(done, "done");
       }
       return done(RelOptRuleOperandChildPolicy.UNORDERED);
     }

@@ -22,6 +22,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,8 +72,8 @@ public enum SqlLibrary {
   public final String fun;
 
   SqlLibrary(String abbrev, String fun) {
-    this.abbrev = Objects.requireNonNull(abbrev);
-    this.fun = Objects.requireNonNull(fun);
+    this.abbrev = Objects.requireNonNull(abbrev, "abbrev");
+    this.fun = Objects.requireNonNull(fun, "fun");
     Preconditions.checkArgument(
         fun.equals(name().toLowerCase(Locale.ROOT).replace("_", "")));
   }
@@ -79,7 +81,7 @@ public enum SqlLibrary {
   /** Looks up a value.
    * Returns null if not found.
    * You can use upper- or lower-case name. */
-  public static SqlLibrary of(String name) {
+  public static @Nullable SqlLibrary of(String name) {
     return MAP.get(name);
   }
 
@@ -87,7 +89,9 @@ public enum SqlLibrary {
   public static List<SqlLibrary> parse(String libraryNameList) {
     final ImmutableList.Builder<SqlLibrary> list = ImmutableList.builder();
     for (String libraryName : libraryNameList.split(",")) {
-      list.add(SqlLibrary.of(libraryName));
+      SqlLibrary library = Objects.requireNonNull(
+          SqlLibrary.of(libraryName), () -> "library does not exist: " + libraryName);
+      list.add(library);
     }
     return list.build();
   }

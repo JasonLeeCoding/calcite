@@ -27,6 +27,8 @@ import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.Objects;
 
+import static org.apache.calcite.linq4j.Nullness.castNonNull;
+
 /**
  * Relational expression representing a scan of a table in a JDBC data source.
  */
@@ -39,13 +41,13 @@ public class JdbcTableScan extends TableScan implements JdbcRel {
       JdbcTable jdbcTable,
       JdbcConvention jdbcConvention) {
     super(cluster, cluster.traitSetOf(jdbcConvention), ImmutableList.of(), table);
-    this.jdbcTable = Objects.requireNonNull(jdbcTable);
+    this.jdbcTable = Objects.requireNonNull(jdbcTable, "jdbcTable");
   }
 
   @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
     assert inputs.isEmpty();
     return new JdbcTableScan(
-        getCluster(), table, jdbcTable, (JdbcConvention) getConvention());
+        getCluster(), table, jdbcTable, (JdbcConvention) castNonNull(getConvention()));
   }
 
   @Override public JdbcImplementor.Result implement(JdbcImplementor implementor) {

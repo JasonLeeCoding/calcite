@@ -58,9 +58,13 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.checker.nullness.qual.PolyNull;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -68,7 +72,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.Nonnull;
+import java.util.function.IntPredicate;
+
+import static org.apache.calcite.linq4j.Nullness.castNonNull;
 
 /**
  * Factory for row expressions.
@@ -109,6 +115,7 @@ public class RexBuilder {
    *
    * @param typeFactory Type factory
    */
+  @SuppressWarnings("method.invocation.invalid")
   public RexBuilder(RelDataTypeFactory typeFactory) {
     this.typeFactory = typeFactory;
     this.booleanTrue =
@@ -135,7 +142,7 @@ public class RexBuilder {
 
   /** Creates a list of {@link org.apache.calcite.rex.RexInputRef} expressions,
    * projecting the fields of a given record type. */
-  public List<? extends RexNode> identityProjects(final RelDataType rowType) {
+  public List<RexNode> identityProjects(final RelDataType rowType) {
     return Util.transform(rowType.getFieldList(),
         input -> new RexInputRef(input.getIndex(), input.getType()));
   }
@@ -295,22 +302,19 @@ public class RexBuilder {
    * @param groupCount number of groups in the aggregate relation
    * @param aggCalls destination list of aggregate calls
    * @param aggCallMapping the dictionary of already added calls
-   * @param aggArgTypes Argument types, not null
+   * @param isNullable Whether input field i is nullable
    *
    * @return Rex expression for the given aggregate call
    */
   public RexNode addAggCall(AggregateCall aggCall, int groupCount,
       List<AggregateCall> aggCalls,
       Map<AggregateCall, RexNode> aggCallMapping,
-      final List<RelDataType> aggArgTypes) {
+      IntPredicate isNullable) {
     if (aggCall.getAggregation() instanceof SqlCountAggFunction
         && !aggCall.isDistinct()) {
       final List<Integer> args = aggCall.getArgList();
-      final List<Integer> nullableArgs = nullableArgs(args, aggArgTypes);
-      if (!nullableArgs.equals(args)) {
-        aggCall = aggCall.copy(nullableArgs, aggCall.filterArg,
-            aggCall.collation);
-      }
+      final List<Integer> nullableArgs = nullableArgs(args, isNullable);
+      aggCall = aggCall.withArgList(nullableArgs);
     }
     RexNode rex = aggCallMapping.get(aggCall);
     if (rex == null) {
@@ -322,6 +326,16 @@ public class RexBuilder {
     return rex;
   }
 
+  @Deprecated // to be removed before 2.0
+  public RexNode addAggCall(final AggregateCall aggCall, int groupCount,
+      List<AggregateCall> aggCalls,
+      Map<AggregateCall, RexNode> aggCallMapping,
+      final @Nullable List<RelDataType> aggArgTypes) {
+    return addAggCall(aggCall, groupCount, aggCalls, aggCallMapping, i ->
+        Objects.requireNonNull(aggArgTypes, "aggArgTypes")
+            .get(aggCall.getArgList().indexOf(i)).isNullable());
+  }
+
   /**
    * Creates a reference to an aggregate call, checking for repeated calls.
    */
@@ -329,7 +343,7 @@ public class RexBuilder {
   public RexNode addAggCall(AggregateCall aggCall, int groupCount,
       boolean indicator, List<AggregateCall> aggCalls,
       Map<AggregateCall, RexNode> aggCallMapping,
-      final List<RelDataType> aggArgTypes) {
+      final @Nullable List<RelDataType> aggArgTypes) {
     Preconditions.checkArgument(!indicator,
         "indicator is deprecated, use GROUPING function instead");
     return addAggCall(aggCall, groupCount, aggCalls,
@@ -338,14 +352,10 @@ public class RexBuilder {
   }
 
   private static List<Integer> nullableArgs(List<Integer> list0,
-      List<RelDataType> types) {
-    final List<Integer> list = new ArrayList<>();
-    for (Pair<Integer, RelDataType> pair : Pair.zip(list0, types)) {
-      if (pair.right.isNullable()) {
-        list.add(pair.left);
-      }
-    }
-    return list;
+      IntPredicate isNullable) {
+    return list0.stream()
+        .filter(isNullable::test)
+        .collect(Util.toImmutableList());
   }
 
   @Deprecated // to be removed before 2.0
@@ -363,13 +373,13 @@ public class RexBuilder {
    * Creates a call to a windowed agg.
    */
   public RexNode makeOver(
-      @Nonnull RelDataType type,
-      @Nonnull SqlAggFunction operator,
-      @Nonnull List<RexNode> exprs,
-      @Nonnull List<RexNode> partitionKeys,
-      @Nonnull ImmutableList<RexFieldCollation> orderKeys,
-      @Nonnull RexWindowBound lowerBound,
-      @Nonnull RexWindowBound upperBound,
+      RelDataType type,
+      SqlAggFunction operator,
+      List<RexNode> exprs,
+      List<RexNode> partitionKeys,
+      ImmutableList<RexFieldCollation> orderKeys,
+      RexWindowBound lowerBound,
+      RexWindowBound upperBound,
       boolean rows,
       boolean allowPartial,
       boolean nullWhenCountZero,
@@ -630,7 +640,7 @@ public class RexBuilder {
     }
   }
 
-  boolean canRemoveCastFromLiteral(RelDataType toType, Comparable value,
+  boolean canRemoveCastFromLiteral(RelDataType toType, @Nullable Comparable value,
       SqlTypeName fromTypeName) {
     final SqlTypeName sqlType = toType.getSqlTypeName();
     if (!RexLiteral.valueMatchesType(value, sqlType, false)) {
@@ -927,7 +937,7 @@ public class RexBuilder {
    * @return Literal
    */
   protected RexLiteral makeLiteral(
-      Comparable o,
+      @Nullable Comparable o,
       RelDataType type,
       SqlTypeName typeName) {
     // All literals except NULL have NOT NULL types.
@@ -941,15 +951,16 @@ public class RexBuilder {
       NlsString nlsString = (NlsString) o;
       if (nlsString.getCollation() == null
           || nlsString.getCharset() == null
-          || !nlsString.getCharset().equals(type.getCharset())
-          || !nlsString.getCollation().equals(type.getCollation())) {
+          || !Objects.equals(nlsString.getCharset(), type.getCharset())
+          || !Objects.equals(nlsString.getCollation(), type.getCollation())) {
         assert type.getSqlTypeName() == SqlTypeName.CHAR
             || type.getSqlTypeName() == SqlTypeName.VARCHAR;
-        assert type.getCharset().name() != null;
-        assert type.getCollation() != null;
+        Charset charset = type.getCharset();
+        assert charset != null : "type.getCharset() must not be null";
+        assert type.getCollation() != null : "type.getCollation() must not be null";
         o = new NlsString(
             nlsString.getValue(),
-            type.getCharset().name(),
+            charset.name(),
             type.getCollation());
       }
       break;
@@ -1021,7 +1032,7 @@ public class RexBuilder {
   /**
    * Creates a BIGINT literal.
    */
-  public RexLiteral makeBigintLiteral(BigDecimal bd) {
+  public RexLiteral makeBigintLiteral(@Nullable BigDecimal bd) {
     RelDataType bigintType =
         typeFactory.createSqlType(
             SqlTypeName.BIGINT);
@@ -1031,7 +1042,7 @@ public class RexBuilder {
   /**
    * Creates a numeric literal.
    */
-  public RexLiteral makeExactLiteral(BigDecimal bd, RelDataType type) {
+  public RexLiteral makeExactLiteral(@Nullable BigDecimal bd, RelDataType type) {
     return makeLiteral(bd, type, SqlTypeName.DECIMAL);
   }
 
@@ -1064,7 +1075,7 @@ public class RexBuilder {
    * @param type approximate numeric type
    * @return new literal
    */
-  public RexLiteral makeApproxLiteral(BigDecimal bd, RelDataType type) {
+  public RexLiteral makeApproxLiteral(@Nullable BigDecimal bd, RelDataType type) {
     assert SqlTypeFamily.APPROXIMATE_NUMERIC.getTypeNames().contains(
         type.getSqlTypeName());
     return makeLiteral(bd, type, SqlTypeName.DOUBLE);
@@ -1074,7 +1085,7 @@ public class RexBuilder {
    * Creates a search argument literal.
    */
   public RexLiteral makeSearchArgumentLiteral(Sarg s, RelDataType type) {
-    return makeLiteral(Objects.requireNonNull(s), type, SqlTypeName.SARG);
+    return makeLiteral(Objects.requireNonNull(s, "s"), type, SqlTypeName.SARG);
   }
 
   /**
@@ -1183,7 +1194,7 @@ public class RexBuilder {
    * Creates a Date literal.
    */
   public RexLiteral makeDateLiteral(DateString date) {
-    return makeLiteral(Objects.requireNonNull(date),
+    return makeLiteral(Objects.requireNonNull(date, "date"),
         typeFactory.createSqlType(SqlTypeName.DATE), SqlTypeName.DATE);
   }
 
@@ -1198,7 +1209,7 @@ public class RexBuilder {
    * Creates a Time literal.
    */
   public RexLiteral makeTimeLiteral(TimeString time, int precision) {
-    return makeLiteral(Objects.requireNonNull(time),
+    return makeLiteral(Objects.requireNonNull(time, "time"),
         typeFactory.createSqlType(SqlTypeName.TIME, precision),
         SqlTypeName.TIME);
   }
@@ -1209,7 +1220,7 @@ public class RexBuilder {
   public RexLiteral makeTimeWithLocalTimeZoneLiteral(
       TimeString time,
       int precision) {
-    return makeLiteral(Objects.requireNonNull(time),
+    return makeLiteral(Objects.requireNonNull(time, "time"),
         typeFactory.createSqlType(SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE, precision),
         SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE);
   }
@@ -1227,7 +1238,7 @@ public class RexBuilder {
    */
   public RexLiteral makeTimestampLiteral(TimestampString timestamp,
       int precision) {
-    return makeLiteral(Objects.requireNonNull(timestamp),
+    return makeLiteral(Objects.requireNonNull(timestamp, "timestamp"),
         typeFactory.createSqlType(SqlTypeName.TIMESTAMP, precision),
         SqlTypeName.TIMESTAMP);
   }
@@ -1238,7 +1249,7 @@ public class RexBuilder {
   public RexLiteral makeTimestampWithLocalTimeZoneLiteral(
       TimestampString timestamp,
       int precision) {
-    return makeLiteral(Objects.requireNonNull(timestamp),
+    return makeLiteral(Objects.requireNonNull(timestamp, "timestamp"),
         typeFactory.createSqlType(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, precision),
         SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE);
   }
@@ -1258,7 +1269,7 @@ public class RexBuilder {
    * {@code INTERVAL '3-7' YEAR TO MONTH}.
    */
   public RexLiteral makeIntervalLiteral(
-      BigDecimal v,
+      @Nullable BigDecimal v,
       SqlIntervalQualifier intervalQualifier) {
     return makeLiteral(
         v,
@@ -1334,7 +1345,7 @@ public class RexBuilder {
 
   /** Returns whether and argument and bounds are have types that are
    * sufficiently compatible to be converted to a {@link Sarg}. */
-  private boolean areAssignable(RexNode arg, List<? extends RexNode> bounds) {
+  private static boolean areAssignable(RexNode arg, List<? extends RexNode> bounds) {
     for (RexNode bound : bounds) {
       if (!SqlTypeUtil.inSameFamily(arg.getType(), bound.getType())
           && !(arg.getType().isStruct() && bound.getType().isStruct())) {
@@ -1372,7 +1383,7 @@ public class RexBuilder {
   /** Converts a list of expressions to a search argument, or returns null if
    * not possible. */
   @SuppressWarnings({"BetaApi", "UnstableApiUsage"})
-  private static <C extends Comparable<C>> Sarg<C> toSarg(Class<C> clazz,
+  private static <C extends Comparable<C>> @Nullable Sarg<C> toSarg(Class<C> clazz,
       List<? extends RexNode> ranges, boolean containsNull) {
     if (ranges.isEmpty()) {
       // Cannot convert an empty list to a Sarg (by this interface, at least)
@@ -1390,7 +1401,7 @@ public class RexBuilder {
     return Sarg.of(containsNull, rangeSet);
   }
 
-  private static <C extends Comparable<C>> C toComparable(Class<C> clazz,
+  private static <C extends Comparable<C>> @Nullable C toComparable(Class<C> clazz,
       RexNode point) {
     switch (point.getKind()) {
     case LITERAL:
@@ -1442,10 +1453,10 @@ public class RexBuilder {
    * </ul>
    *
    * @param type      Type
-   * @return Simple literal, or cast simple literal
+   * @return Simple literal
    */
-  public RexNode makeZeroLiteral(RelDataType type) {
-    return makeLiteral(zeroValue(type), type, false);
+  public RexLiteral makeZeroLiteral(RelDataType type) {
+    return makeLiteral(zeroValue(type), type);
   }
 
   private static Comparable zeroValue(RelDataType type) {
@@ -1484,6 +1495,18 @@ public class RexBuilder {
 
   /**
    * Creates a literal of a given type, padding values of constant-width
+   * types to match their type, not allowing casts.
+   *
+   * @param value     Value
+   * @param type      Type
+   * @return Simple literal
+   */
+  public RexLiteral makeLiteral(@Nullable Object value, RelDataType type) {
+    return (RexLiteral) makeLiteral(value, type, false, false);
+  }
+
+  /**
+   * Creates a literal of a given type, padding values of constant-width
    * types to match their type.
    *
    * @param value     Value
@@ -1492,7 +1515,7 @@ public class RexBuilder {
    *                  {@link RexLiteral} but may not be the exact type
    * @return Simple literal, or cast simple literal
    */
-  public RexNode makeLiteral(Object value, RelDataType type,
+  public RexNode makeLiteral(@Nullable Object value, RelDataType type,
       boolean allowCast) {
     return makeLiteral(value, type, allowCast, false);
   }
@@ -1518,7 +1541,7 @@ public class RexBuilder {
    *                  to CHAR(3) 'foo'
    * @return Simple literal, or cast simple literal
    */
-  public RexNode makeLiteral(Object value, RelDataType type,
+  public RexNode makeLiteral(@Nullable Object value, RelDataType type,
       boolean allowCast, boolean trim) {
     if (value == null) {
       return makeCast(type, constantNull);
@@ -1526,8 +1549,11 @@ public class RexBuilder {
     if (type.isNullable()) {
       final RelDataType typeNotNull =
           typeFactory.createTypeWithNullability(type, false);
-      RexNode literalNotNull = makeLiteral(value, typeNotNull, allowCast);
-      return makeAbstractCast(type, literalNotNull);
+      if (allowCast) {
+        RexNode literalNotNull = makeLiteral(value, typeNotNull, allowCast);
+        return makeAbstractCast(type, literalNotNull);
+      }
+      type = typeNotNull;
     }
     value = clean(value, type);
     RexLiteral literal;
@@ -1594,7 +1620,7 @@ public class RexBuilder {
     case INTERVAL_MINUTE_SECOND:
     case INTERVAL_SECOND:
       return makeIntervalLiteral((BigDecimal) value,
-          type.getIntervalQualifier());
+          castNonNull(type.getIntervalQualifier()));
     case SYMBOL:
       return makeFlag((Enum) value);
     case MAP:
@@ -1658,10 +1684,12 @@ public class RexBuilder {
   }
 
   /** Converts the type of a value to comply with
-   * {@link org.apache.calcite.rex.RexLiteral#valueMatchesType}. */
-  private static Object clean(Object o, RelDataType type) {
+   * {@link org.apache.calcite.rex.RexLiteral#valueMatchesType}.
+   *
+   * <p>Returns null if and only if {@code o} is null. */
+  private static @PolyNull Object clean(@PolyNull Object o, RelDataType type) {
     if (o == null) {
-      return null;
+      return o;
     }
     switch (type.getSqlTypeName()) {
     case TINYINT:
@@ -1709,6 +1737,7 @@ public class RexBuilder {
       if (o instanceof NlsString) {
         return o;
       }
+      assert type.getCharset() != null : type + ".getCharset() must not be null";
       return new NlsString((String) o, type.getCharset().name(),
           type.getCollation());
     case TIME:
@@ -1761,7 +1790,7 @@ public class RexBuilder {
     }
   }
 
-  private RelDataType guessType(Object value) {
+  private RelDataType guessType(@Nullable Object value) {
     if (value == null) {
       return typeFactory.createSqlType(SqlTypeName.NULL);
     }

@@ -27,6 +27,8 @@ import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.util.ImmutableNullableList;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -35,7 +37,7 @@ import java.util.Objects;
  */
 public class SqlCreateMaterializedView extends SqlCreate {
   public final SqlIdentifier name;
-  public final SqlNodeList columnList;
+  public final @Nullable SqlNodeList columnList;
   public final SqlNode query;
 
   private static final SqlOperator OPERATOR =
@@ -44,14 +46,15 @@ public class SqlCreateMaterializedView extends SqlCreate {
 
   /** Creates a SqlCreateView. */
   SqlCreateMaterializedView(SqlParserPos pos, boolean replace,
-      boolean ifNotExists, SqlIdentifier name, SqlNodeList columnList,
+      boolean ifNotExists, SqlIdentifier name, @Nullable SqlNodeList columnList,
       SqlNode query) {
     super(OPERATOR, pos, replace, ifNotExists);
-    this.name = Objects.requireNonNull(name);
+    this.name = Objects.requireNonNull(name, "name");
     this.columnList = columnList; // may be null
-    this.query = Objects.requireNonNull(query);
+    this.query = Objects.requireNonNull(query, "query");
   }
 
+  @SuppressWarnings("nullness")
   @Override public List<SqlNode> getOperandList() {
     return ImmutableNullableList.of(name, columnList, query);
   }

@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.linq4j.tree;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.Objects;
 
 /**
@@ -32,9 +34,9 @@ public class ForEachStatement extends Statement {
   public ForEachStatement(ParameterExpression parameter, Expression iterable,
       Statement body) {
     super(ExpressionType.ForEach, Void.TYPE);
-    this.parameter = Objects.requireNonNull(parameter);
-    this.iterable = Objects.requireNonNull(iterable);
-    this.body = Objects.requireNonNull(body); // may be empty block, not null
+    this.parameter = Objects.requireNonNull(parameter, "parameter");
+    this.iterable = Objects.requireNonNull(iterable, "iterable");
+    this.body = Objects.requireNonNull(body, "body"); // may be empty block, not null
   }
 
   @Override public ForEachStatement accept(Shuttle shuttle) {
@@ -59,7 +61,7 @@ public class ForEachStatement extends Statement {
         .append(Blocks.toBlock(body));
   }
 
-  @Override public boolean equals(Object o) {
+  @Override public boolean equals(@Nullable Object o) {
     return this == o
         || o instanceof ForEachStatement
         && parameter.equals(((ForEachStatement) o).parameter)

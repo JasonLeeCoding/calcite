@@ -38,7 +38,7 @@ import java.util.Objects;
 /**
  * Utilities for geometry.
  */
-@SuppressWarnings({"UnnecessaryUnboxing", "WeakerAccess", "unused"})
+@SuppressWarnings({"WeakerAccess", "unused"})
 @Deterministic
 @Strict
 @Experimental
@@ -53,10 +53,8 @@ public class Geometries {
     return new UnsupportedOperationException();
   }
 
+  /** Returns a Geom that is a Geometry bound to a SRID. */
   protected static Geom bind(Geometry geometry, int srid) {
-    if (geometry == null) {
-      return null;
-    }
     if (srid == NO_SRID) {
       return new SimpleGeom(geometry);
     }
@@ -215,7 +213,7 @@ public class Geometries {
     final Geometry g;
 
     SimpleGeom(Geometry g) {
-      this.g = Objects.requireNonNull(g);
+      this.g = Objects.requireNonNull(g, "g");
     }
 
     @Override public String toString() {
@@ -255,7 +253,7 @@ public class Geometries {
     final MapGeometry mg;
 
     MapGeom(MapGeometry mg) {
-      this.mg = Objects.requireNonNull(mg);
+      this.mg = Objects.requireNonNull(mg, "mg");
     }
 
     @Override public String toString() {
@@ -285,7 +283,7 @@ public class Geometries {
       if (srid == mg.getSpatialReference().getID()) {
         return this;
       }
-      return bind(mg.getGeometry(), srid);
+      return bind(Objects.requireNonNull(mg.getGeometry()), srid);
     }
 
     @Override public Geom wrap(Geometry g) {

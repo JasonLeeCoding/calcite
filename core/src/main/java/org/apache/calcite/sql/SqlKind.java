@@ -209,6 +209,9 @@ public enum SqlKind {
   /** {@code WITHIN GROUP} operator. */
   WITHIN_GROUP,
 
+  /** {@code WITHIN DISTINCT} operator. */
+  WITHIN_DISTINCT,
+
   /** Window specification. */
   WINDOW,
 
@@ -220,6 +223,9 @@ public enum SqlKind {
 
   /** PIVOT clause. */
   PIVOT,
+
+  /** UNPIVOT clause. */
+  UNPIVOT,
 
   /** MATCH_RECOGNIZE clause. */
   MATCH_RECOGNIZE,
@@ -349,6 +355,9 @@ public enum SqlKind {
   /** {@code LIKE} operator. */
   LIKE,
 
+  /** {@code RLIKE} operator. */
+  RLIKE,
+
   /** {@code SIMILAR} operator. */
   SIMILAR,
 
@@ -370,6 +379,9 @@ public enum SqlKind {
 
   /** {@code INTERVAL} expression. */
   INTERVAL,
+
+  /** {@code SEPARATOR} expression. */
+  SEPARATOR,
 
   /** {@code NULLIF} operator. */
   NULLIF,
@@ -626,6 +638,18 @@ public enum SqlKind {
   /** {@code REVERSE} function (SQL Server, MySQL). */
   REVERSE,
 
+  /** {@code SUBSTR} function (BigQuery semantics). */
+  SUBSTR_BIG_QUERY,
+
+  /** {@code SUBSTR} function (MySQL semantics). */
+  SUBSTR_MYSQL,
+
+  /** {@code SUBSTR} function (Oracle semantics). */
+  SUBSTR_ORACLE,
+
+  /** {@code SUBSTR} function (PostgreSQL semantics). */
+  SUBSTR_POSTGRESQL,
+
   /** Call to a function using JDBC function syntax. */
   JDBC_FN,
 
@@ -816,6 +840,9 @@ public enum SqlKind {
 
   /** The {@code ARRAY_CONCAT_AGG} aggregate function. */
   ARRAY_CONCAT_AGG,
+
+  /** The {@code GROUP_CONCAT} aggregate function. */
+  GROUP_CONCAT,
 
   /** The {@code COLLECT} aggregate function. */
   COLLECT,
@@ -1046,7 +1073,7 @@ public enum SqlKind {
           AVG, STDDEV_POP, STDDEV_SAMP, VAR_POP, VAR_SAMP, NTILE, COLLECT,
           FUSION, SINGLE_VALUE, ROW_NUMBER, RANK, PERCENT_RANK, DENSE_RANK,
           CUME_DIST, JSON_ARRAYAGG, JSON_OBJECTAGG, BIT_AND, BIT_OR, BIT_XOR,
-          LISTAGG, STRING_AGG, ARRAY_AGG, ARRAY_CONCAT_AGG, COUNTIF,
+          LISTAGG, STRING_AGG, ARRAY_AGG, ARRAY_CONCAT_AGG, GROUP_CONCAT, COUNTIF,
           INTERSECTION, ANY_VALUE);
 
   /**
@@ -1128,7 +1155,7 @@ public enum SqlKind {
           concat(
               EnumSet.of(AS, ARGUMENT_ASSIGNMENT, DEFAULT,
                   RUNNING, FINAL, LAST, FIRST, PREV, NEXT,
-                  FILTER, WITHIN_GROUP, IGNORE_NULLS, RESPECT_NULLS,
+                  FILTER, WITHIN_GROUP, IGNORE_NULLS, RESPECT_NULLS, SEPARATOR,
                   DESCENDING, CUBE, ROLLUP, GROUPING_SETS, EXTEND, LATERAL,
                   SELECT, JOIN, OTHER_FUNCTION, POSITION, CAST, TRIM, FLOOR, CEIL,
                   TIMESTAMP_ADD, TIMESTAMP_DIFF, EXTRACT, INTERVAL,
@@ -1370,6 +1397,14 @@ public enum SqlKind {
       return GREATER_THAN;
     case GREATER_THAN_OR_EQUAL:
       return LESS_THAN;
+    case IN:
+      return NOT_IN;
+    case NOT_IN:
+      return IN;
+    case DRUID_IN:
+      return DRUID_NOT_IN;
+    case DRUID_NOT_IN:
+      return DRUID_IN;
     case IS_TRUE:
       return IS_FALSE;
     case IS_FALSE:

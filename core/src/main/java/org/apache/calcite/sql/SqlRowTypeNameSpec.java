@@ -66,8 +66,8 @@ public class SqlRowTypeNameSpec extends SqlTypeNameSpec {
       List<SqlIdentifier> fieldNames,
       List<SqlDataTypeSpec> fieldTypes) {
     super(new SqlIdentifier(SqlTypeName.ROW.getName(), pos), pos);
-    Objects.requireNonNull(fieldNames);
-    Objects.requireNonNull(fieldTypes);
+    Objects.requireNonNull(fieldNames, "fieldNames");
+    Objects.requireNonNull(fieldTypes, "fieldTypes");
     assert fieldNames.size() > 0; // there must be at least one field.
     this.fieldNames = fieldNames;
     this.fieldTypes = fieldTypes;
@@ -92,7 +92,8 @@ public class SqlRowTypeNameSpec extends SqlTypeNameSpec {
       writer.sep(",", false);
       p.left.unparse(writer, 0, 0);
       p.right.unparse(writer, leftPrec, rightPrec);
-      if (p.right.getNullable() != null && p.right.getNullable()) {
+      Boolean isNullable = p.right.getNullable();
+      if (isNullable != null && isNullable) {
         // Row fields default is not nullable.
         writer.print("NULL");
       }

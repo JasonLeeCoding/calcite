@@ -263,6 +263,9 @@ public abstract class SqlToRelTestBase {
 
     /** Returns a tester that uses a given context. */
     Tester withContext(UnaryOperator<Context> transform);
+
+    /** Trims a RelNode. */
+    RelNode trimRelNode(RelNode relNode);
   }
 
   //~ Inner Classes ----------------------------------------------------------
@@ -571,14 +574,14 @@ public abstract class SqlToRelTestBase {
       this.enableTypeCoercion = enableTypeCoercion;
       this.catalogReaderFactory = catalogReaderFactory;
       this.clusterFactory = clusterFactory;
-      this.configTransform = Objects.requireNonNull(configTransform);
-      this.plannerFactory = Objects.requireNonNull(plannerFactory);
-      this.conformance = Objects.requireNonNull(conformance);
-      this.contextTransform = Objects.requireNonNull(contextTransform);
+      this.configTransform = Objects.requireNonNull(configTransform, "configTransform");
+      this.plannerFactory = Objects.requireNonNull(plannerFactory, "plannerFactory");
+      this.conformance = Objects.requireNonNull(conformance, "conformance");
+      this.contextTransform = Objects.requireNonNull(contextTransform, "contextTransform");
     }
 
     public RelRoot convertSqlToRel(String sql) {
-      Objects.requireNonNull(sql);
+      Objects.requireNonNull(sql, "sql");
       final SqlNode sqlQuery;
       try {
         sqlQuery = parseQuery(sql);
@@ -594,12 +597,12 @@ public abstract class SqlToRelTestBase {
           createValidator(
               catalogReader, typeFactory);
       final Context context = getContext();
-      final CalciteConnectionConfig calciteConfig =
-          context.unwrap(CalciteConnectionConfig.class);
-      if (calciteConfig != null) {
-        validator.transform(config ->
-            config.withDefaultNullCollation(calciteConfig.defaultNullCollation()));
-      }
+      context.maybeUnwrap(CalciteConnectionConfig.class)
+          .ifPresent(calciteConfig -> {
+            validator.transform(config ->
+                config.withDefaultNullCollation(
+                    calciteConfig.defaultNullCollation()));
+          });
       final SqlToRelConverter.Config config =
           configTransform.apply(SqlToRelConverter.config());
 
@@ -624,6 +627,34 @@ public abstract class SqlToRelTestBase {
         root = root.withRel(converter.trimUnusedFields(true, root.rel));
       }
       return root;
+    }
+
+    public RelNode trimRelNode(RelNode relNode) {
+      final RelDataTypeFactory typeFactory = getTypeFactory();
+      final Prepare.CatalogReader catalogReader =
+          createCatalogReader(typeFactory);
+      final SqlValidator validator =
+          createValidator(
+              catalogReader, typeFactory);
+      final Context context = getContext();
+      final CalciteConnectionConfig calciteConfig =
+          context.unwrap(CalciteConnectionConfig.class);
+      if (calciteConfig != null) {
+        validator.transform(config ->
+            config.withDefaultNullCollation(calciteConfig.defaultNullCollation()));
+      }
+      final SqlToRelConverter.Config config =
+          configTransform.apply(SqlToRelConverter.config());
+
+      final SqlToRelConverter converter =
+          createSqlToRelConverter(
+              validator,
+              catalogReader,
+              typeFactory,
+              config);
+      relNode = converter.flattenTypes(relNode, true);
+      relNode = converter.trimUnusedFields(true, relNode);
+      return relNode;
     }
 
     protected SqlToRelConverter createSqlToRelConverter(
@@ -705,15 +736,13 @@ public abstract class SqlToRelTestBase {
      * @return New operator table
      */
     protected SqlOperatorTable createOperatorTable() {
-      final Context context = getContext();
-      final SqlOperatorTable opTab0 = context.unwrap(SqlOperatorTable.class);
-      if (opTab0 != null) {
-        return opTab0;
-      }
-      final MockSqlOperatorTable opTab =
-          new MockSqlOperatorTable(SqlStdOperatorTable.instance());
-      MockSqlOperatorTable.addRamp(opTab);
-      return opTab;
+      return getContext().maybeUnwrap(SqlOperatorTable.class)
+          .orElseGet(() -> {
+            final MockSqlOperatorTable opTab =
+                new MockSqlOperatorTable(SqlStdOperatorTable.instance());
+            MockSqlOperatorTable.addRamp(opTab);
+            return opTab;
+          });
     }
 
     private Context getContext() {

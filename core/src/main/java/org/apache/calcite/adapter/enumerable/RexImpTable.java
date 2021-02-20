@@ -71,6 +71,8 @@ import org.apache.calcite.util.Util;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -101,6 +103,7 @@ import static org.apache.calcite.linq4j.tree.ExpressionType.Negate;
 import static org.apache.calcite.linq4j.tree.ExpressionType.NotEqual;
 import static org.apache.calcite.linq4j.tree.ExpressionType.Subtract;
 import static org.apache.calcite.linq4j.tree.ExpressionType.UnaryPlus;
+import static org.apache.calcite.sql.fun.SqlInternalOperators.THROW_UNLESS;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.ARRAY_AGG;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.ARRAY_CONCAT_AGG;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.BOOL_AND;
@@ -118,6 +121,7 @@ import static org.apache.calcite.sql.fun.SqlLibraryOperators.EXISTS_NODE;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.EXTRACT_VALUE;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.EXTRACT_XML;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.FROM_BASE64;
+import static org.apache.calcite.sql.fun.SqlLibraryOperators.ILIKE;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.JSON_DEPTH;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.JSON_KEYS;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.JSON_LENGTH;
@@ -134,6 +138,7 @@ import static org.apache.calcite.sql.fun.SqlLibraryOperators.REGEXP_REPLACE;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.REPEAT;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.REVERSE;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.RIGHT;
+import static org.apache.calcite.sql.fun.SqlLibraryOperators.RLIKE;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.SHA1;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.SINH;
 import static org.apache.calcite.sql.fun.SqlLibraryOperators.SOUNDEX;
@@ -262,11 +267,10 @@ import static org.apache.calcite.sql.fun.SqlStdOperatorTable.MULTISET_UNION_DIST
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NEXT_VALUE;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT_EQUALS;
-import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT_LIKE;
-import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT_SIMILAR_TO;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT_SUBMULTISET_OF;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NTH_VALUE;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.NTILE;
+import static org.apache.calcite.sql.fun.SqlStdOperatorTable.OCTET_LENGTH;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.OR;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.OVERLAY;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.PI;
@@ -306,6 +310,8 @@ import static org.apache.calcite.sql.fun.SqlStdOperatorTable.UNARY_PLUS;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.UPPER;
 import static org.apache.calcite.sql.fun.SqlStdOperatorTable.USER;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Contains implementations of Rex operators as Java code.
  */
@@ -335,7 +341,9 @@ public class RexImpTable {
   private final Map<SqlOperator, Supplier<? extends TableFunctionCallImplementor>>
       tvfImplementorMap = new HashMap<>();
 
+  @SuppressWarnings("method.invocation.invalid")
   RexImpTable() {
+    defineMethod(THROW_UNLESS, BuiltInMethod.THROW_UNLESS.method, NullPolicy.NONE);
     defineMethod(ROW, BuiltInMethod.ARRAY.method, NullPolicy.NONE);
     defineMethod(UPPER, BuiltInMethod.UPPER.method, NullPolicy.STRICT);
     defineMethod(LOWER, BuiltInMethod.LOWER.method, NullPolicy.STRICT);
@@ -354,9 +362,12 @@ public class RexImpTable {
         NullPolicy.STRICT);
     defineMethod(CHAR_LENGTH, BuiltInMethod.CHAR_LENGTH.method,
         NullPolicy.STRICT);
+    defineMethod(OCTET_LENGTH, BuiltInMethod.OCTET_LENGTH.method,
+        NullPolicy.STRICT);
     defineMethod(CONCAT, BuiltInMethod.STRING_CONCAT.method,
         NullPolicy.STRICT);
-    defineMethod(CONCAT_FUNCTION, BuiltInMethod.MULTI_STRING_CONCAT.method, NullPolicy.STRICT);
+    defineMethod(CONCAT_FUNCTION, BuiltInMethod.MULTI_STRING_CONCAT.method,
+        NullPolicy.STRICT);
     defineMethod(CONCAT2, BuiltInMethod.STRING_CONCAT.method, NullPolicy.STRICT);
     defineMethod(OVERLAY, BuiltInMethod.OVERLAY.method, NullPolicy.STRICT);
     defineMethod(POSITION, BuiltInMethod.POSITION.method, NullPolicy.STRICT);
@@ -462,30 +473,33 @@ public class RexImpTable {
     map.put(IS_FALSE, new IsFalseImplementor());
     map.put(IS_NOT_FALSE, new IsNotFalseImplementor());
 
-    // LIKE and SIMILAR
-    final MethodImplementor likeImplementor =
+    // LIKE, ILIKE and SIMILAR
+    map.put(LIKE,
         new MethodImplementor(BuiltInMethod.LIKE.method, NullPolicy.STRICT,
-            false);
-    map.put(LIKE, likeImplementor);
-    map.put(NOT_LIKE, likeImplementor);
-    final MethodImplementor similarImplementor =
+            false));
+    map.put(ILIKE,
+        new MethodImplementor(BuiltInMethod.ILIKE.method, NullPolicy.STRICT,
+            false));
+    map.put(RLIKE,
+        new MethodImplementor(BuiltInMethod.RLIKE.method, NullPolicy.STRICT,
+            false));
+    map.put(SIMILAR_TO,
         new MethodImplementor(BuiltInMethod.SIMILAR.method, NullPolicy.STRICT,
-            false);
-    map.put(SIMILAR_TO, similarImplementor);
-    map.put(NOT_SIMILAR_TO, NotImplementor.of(similarImplementor));
+        false));
 
     // POSIX REGEX
-    final MethodImplementor posixRegexImplementor =
-        new MethodImplementor(BuiltInMethod.POSIX_REGEX.method,
-            NullPolicy.STRICT, false);
+    final MethodImplementor posixRegexImplementorCaseSensitive =
+        new PosixRegexMethodImplementor(true);
+    final MethodImplementor posixRegexImplementorCaseInsensitive =
+        new PosixRegexMethodImplementor(false);
     map.put(SqlStdOperatorTable.POSIX_REGEX_CASE_INSENSITIVE,
-        posixRegexImplementor);
+        posixRegexImplementorCaseInsensitive);
     map.put(SqlStdOperatorTable.POSIX_REGEX_CASE_SENSITIVE,
-        posixRegexImplementor);
+        posixRegexImplementorCaseSensitive);
     map.put(SqlStdOperatorTable.NEGATED_POSIX_REGEX_CASE_INSENSITIVE,
-        NotImplementor.of(posixRegexImplementor));
+        NotImplementor.of(posixRegexImplementorCaseInsensitive));
     map.put(SqlStdOperatorTable.NEGATED_POSIX_REGEX_CASE_SENSITIVE,
-        NotImplementor.of(posixRegexImplementor));
+        NotImplementor.of(posixRegexImplementorCaseSensitive));
     map.put(REGEXP_REPLACE, new RegexpReplaceImplementor());
 
     // Multisets & arrays
@@ -676,7 +690,7 @@ public class RexImpTable {
     tvfImplementorMap.put(SESSION, SessionImplementor::new);
   }
 
-  private <T> Supplier<T> constructorSupplier(Class<T> klass) {
+  private static <T> Supplier<T> constructorSupplier(Class<T> klass) {
     final Constructor<T> constructor;
     try {
       constructor = klass.getDeclaredConstructor();
@@ -723,7 +737,7 @@ public class RexImpTable {
   }
 
   private void defineUnary(SqlOperator operator, ExpressionType expressionType,
-      NullPolicy nullPolicy, String backupMethodName) {
+      NullPolicy nullPolicy, @Nullable String backupMethodName) {
     map.put(operator, new UnaryImplementor(expressionType, nullPolicy, backupMethodName));
   }
 
@@ -764,7 +778,7 @@ public class RexImpTable {
     };
   }
 
-  public RexCallImplementor get(final SqlOperator operator) {
+  public @Nullable RexCallImplementor get(final SqlOperator operator) {
     if (operator instanceof SqlUserDefinedFunction) {
       org.apache.calcite.schema.Function udf =
           ((SqlUserDefinedFunction) operator).getFunction();
@@ -781,7 +795,7 @@ public class RexImpTable {
     return map.get(operator);
   }
 
-  public AggImplementor get(final SqlAggFunction aggregation,
+  public @Nullable AggImplementor get(final SqlAggFunction aggregation,
       boolean forWindowAggregate) {
     if (aggregation instanceof SqlUserDefinedAggFunction) {
       final SqlUserDefinedAggFunction udaf =
@@ -926,7 +940,7 @@ public class RexImpTable {
         switch (this) {
         case NOT_POSSIBLE:
           return EnumUtils.convert(x,
-              Primitive.ofBox(x.getType()).primitiveClass);
+              Primitive.unbox(x.getType()));
         default:
           break;
         }
@@ -953,8 +967,8 @@ public class RexImpTable {
   }
 
   static Expression getDefaultValue(Type type) {
-    if (Primitive.is(type)) {
-      Primitive p = Primitive.of(type);
+    Primitive p = Primitive.of(type);
+    if (p != null) {
       return Expressions.constant(p.defaultValue, type);
     }
     return Expressions.constant(null, type);
@@ -1390,7 +1404,10 @@ public class RexImpTable {
         AggResultContext result) {
       List<Expression> acc = result.accumulator();
       return Expressions.call(
-          afi.isStatic ? null : acc.get(1), afi.resultMethod, acc.get(0));
+          afi.isStatic ? null : acc.get(1),
+          requireNonNull(afi.resultMethod,
+              () -> "resultMethod is null. Does " + afi.declaringClass + " declare result method?"),
+          acc.get(0));
     }
   }
 
@@ -1404,8 +1421,9 @@ public class RexImpTable {
         new Object() {
           int curentPosition; // position in for-win-agg-loop
           int startIndex;     // index of start of window
-          Comparable[] rows;  // accessed via WinAggAddContext.compareRows
-          {
+          Comparable @Nullable [] rows;  // accessed via WinAggAddContext.compareRows
+          @SuppressWarnings("nullness")
+          void sample() {
             if (curentPosition > startIndex) {
               if (rows[curentPosition - 1].compareTo(rows[curentPosition])
                   > 0) {
@@ -1925,7 +1943,8 @@ public class RexImpTable {
           preFloor = false;
         }
         final TimeUnitRange timeUnitRange =
-            (TimeUnitRange) translator.getLiteralValue(argValueList.get(1));
+            (TimeUnitRange) requireNonNull(translator.getLiteralValue(argValueList.get(1)),
+            "timeUnitRange");
         switch (timeUnitRange) {
         case YEAR:
         case QUARTER:
@@ -1959,7 +1978,7 @@ public class RexImpTable {
   private static class MethodImplementor extends AbstractRexCallImplementor {
     protected final Method method;
 
-    MethodImplementor(Method method, NullPolicy nullPolicy, boolean harmonize) {
+    MethodImplementor(Method method, @Nullable NullPolicy nullPolicy, boolean harmonize) {
       super(nullPolicy, harmonize);
       this.method = method;
     }
@@ -1977,7 +1996,7 @@ public class RexImpTable {
       }
     }
 
-    static Expression call(Method method, Expression target,
+    static Expression call(Method method, @Nullable Expression target,
         List<Expression> args) {
       if (method.isVarArgs()) {
         final int last = method.getParameterCount() - 1;
@@ -1992,6 +2011,25 @@ public class RexImpTable {
         final Class<?> clazz = method.getDeclaringClass();
         return EnumUtils.call(target, clazz, method.getName(), args);
       }
+    }
+  }
+
+  /** Implementor for {@link org.apache.calcite.sql.fun.SqlPosixRegexOperator}s. */
+  private static class PosixRegexMethodImplementor extends MethodImplementor {
+    protected final boolean caseSensitive;
+
+    PosixRegexMethodImplementor(boolean caseSensitive) {
+      super(BuiltInMethod.POSIX_REGEX.method, NullPolicy.STRICT, false);
+      this.caseSensitive = caseSensitive;
+    }
+
+    @Override Expression implementSafe(RexToLixTranslator translator,
+        RexCall call, List<Expression> argValueList) {
+      assert argValueList.size() == 2;
+      // Add extra parameter (caseSensitive boolean flag), required by SqlFunctions#posixRegex.
+      final List<Expression> newOperands = new ArrayList<>(argValueList);
+      newOperands.add(Expressions.constant(caseSensitive));
+      return super.implementSafe(translator, call, newOperands);
     }
   }
 
@@ -2182,7 +2220,7 @@ public class RexImpTable {
     }
 
     /** Returns whether any of a call's operands have ANY type. */
-    private boolean anyAnyOperands(RexCall call) {
+    private static boolean anyAnyOperands(RexCall call) {
       for (RexNode operand : call.operands) {
         if (operand.getType().getSqlTypeName() == SqlTypeName.ANY) {
           return true;
@@ -2202,7 +2240,7 @@ public class RexImpTable {
           expression0, expression1);
     }
 
-    private Expression maybeBox(Expression expression) {
+    private static Expression maybeBox(Expression expression) {
       final Primitive primitive = Primitive.of(expression.getType());
       if (primitive != null) {
         expression = Expressions.box(expression, primitive);
@@ -2214,10 +2252,10 @@ public class RexImpTable {
   /** Implementor for unary operators. */
   private static class UnaryImplementor extends AbstractRexCallImplementor {
     private final ExpressionType expressionType;
-    private final String backupMethodName;
+    private final @Nullable String backupMethodName;
 
     UnaryImplementor(ExpressionType expressionType, NullPolicy nullPolicy,
-        String backupMethodName) {
+        @Nullable String backupMethodName) {
       super(nullPolicy, false);
       this.expressionType = expressionType;
       this.backupMethodName = backupMethodName;
@@ -2265,7 +2303,7 @@ public class RexImpTable {
         final RexCall call, final List<Expression> argValueList) {
       final TimeUnitRange timeUnitRange =
           (TimeUnitRange) translator.getLiteralValue(argValueList.get(0));
-      final TimeUnit unit = timeUnitRange.startUnit;
+      final TimeUnit unit = requireNonNull(timeUnitRange, "timeUnitRange").startUnit;
       Expression operand = argValueList.get(1);
       final SqlTypeName sqlTypeName =
           call.operands.get(1).getType().getSqlTypeName();
@@ -2435,7 +2473,7 @@ public class RexImpTable {
       return implementRecurse(translator, argValueList);
     }
 
-    private Expression implementRecurse(RexToLixTranslator translator,
+    private static Expression implementRecurse(RexToLixTranslator translator,
         final List<Expression> argValueList) {
       if (argValueList.size() == 1) {
         return argValueList.get(0);
@@ -2482,13 +2520,13 @@ public class RexImpTable {
               targetType, argValueList.get(0));
     }
 
-    private RelDataType nullifyType(JavaTypeFactory typeFactory,
+    private static RelDataType nullifyType(JavaTypeFactory typeFactory,
         final RelDataType type, final boolean nullable) {
       if (type instanceof RelDataTypeFactoryImpl.JavaType) {
-        final Primitive primitive = Primitive.ofBox(
-            ((RelDataTypeFactoryImpl.JavaType) type).getJavaClass());
-        if (primitive != null) {
-          return typeFactory.createJavaType(primitive.primitiveClass);
+        Class<?> javaClass = ((RelDataTypeFactoryImpl.JavaType) type).getJavaClass();
+        final Class<?> primitive = Primitive.unbox(javaClass);
+        if (primitive != javaClass) {
+          return typeFactory.createJavaType(primitive);
         }
       }
       return typeFactory.createTypeWithNullability(type, nullable);
@@ -2783,7 +2821,7 @@ public class RexImpTable {
     }
 
     /** Normalizes a TIME value into 00:00:00..23:59:39. */
-    private Expression normalize(SqlTypeName typeName, Expression e) {
+    private static Expression normalize(SqlTypeName typeName, Expression e) {
       switch (typeName) {
       case TIME:
         return Expressions.call(BuiltInMethod.FLOOR_MOD.method, e,
@@ -2822,7 +2860,7 @@ public class RexImpTable {
 
       // Just take the last one, if exists
       if ("*".equals(alpha)) {
-        ((EnumerableMatch.PassedRowsInputGetter) translator.inputGetter).setIndex(i);
+        setInputGetterIndex(translator, i);
         // Important, unbox the node / expression to avoid NullAs.NOT_POSSIBLE
         final RexPatternFieldRef ref = (RexPatternFieldRef) node;
         final RexPatternFieldRef newRef =
@@ -2831,11 +2869,11 @@ public class RexImpTable {
                 translator.typeFactory.createTypeWithNullability(ref.getType(),
                     true));
         final Expression expression = translator.translate(newRef, NullAs.NULL);
-        ((EnumerableMatch.PassedRowsInputGetter) translator.inputGetter).setIndex(null);
+        setInputGetterIndex(translator, null);
         return expression;
       } else {
         // Alpha != "*" so we have to search for a specific one to find and use that, if found
-        ((EnumerableMatch.PassedRowsInputGetter) translator.inputGetter).setIndex(
+        setInputGetterIndex(translator,
             Expressions.call(BuiltInMethod.MATCH_UTILS_LAST_WITH_SYMBOL.method,
                 Expressions.constant(alpha), rows, symbols, i));
 
@@ -2847,9 +2885,14 @@ public class RexImpTable {
                 translator.typeFactory.createTypeWithNullability(ref.getType(),
                     true));
         final Expression expression = translator.translate(newRef, NullAs.NULL);
-        ((EnumerableMatch.PassedRowsInputGetter) translator.inputGetter).setIndex(null);
+        setInputGetterIndex(translator, null);
         return expression;
       }
+    }
+
+    private static void setInputGetterIndex(RexToLixTranslator translator, @Nullable Expression o) {
+      requireNonNull((EnumerableMatch.PassedRowsInputGetter) translator.inputGetter,
+          "inputGetter").setIndex(o);
     }
   }
 
@@ -2879,10 +2922,10 @@ public class RexImpTable {
    */
   private abstract static class AbstractRexCallImplementor
       implements RexCallImplementor {
-    final NullPolicy nullPolicy;
+    final @Nullable NullPolicy nullPolicy;
     private final boolean harmonize;
 
-    AbstractRexCallImplementor(NullPolicy nullPolicy, boolean harmonize) {
+    AbstractRexCallImplementor(@Nullable NullPolicy nullPolicy, boolean harmonize) {
       this.nullPolicy = nullPolicy;
       this.harmonize = harmonize;
     }
@@ -2980,7 +3023,7 @@ public class RexImpTable {
     }
 
     /** Ensures that operands have identical type. */
-    private List<Expression> harmonize(final List<Expression> argValueList,
+    private static List<Expression> harmonize(final List<Expression> argValueList,
         final RexToLixTranslator translator, final RexCall call) {
       int nullCount = 0;
       final List<RelDataType> types = new ArrayList<>();
@@ -3026,7 +3069,7 @@ public class RexImpTable {
       if (nullPolicy == NullPolicy.STRICT || nullPolicy == NullPolicy.ANY
           || nullPolicy == NullPolicy.SEMI_STRICT) {
         unboxValueList = argValueList.stream()
-            .map(this::unboxExpression)
+            .map(AbstractRexCallImplementor::unboxExpression)
             .collect(Collectors.toList());
       }
       if (nullPolicy == NullPolicy.ARG0 && argValueList.size() > 0) {
@@ -3036,7 +3079,7 @@ public class RexImpTable {
       return unboxValueList;
     }
 
-    private Expression unboxExpression(final Expression argValue) {
+    private static Expression unboxExpression(final Expression argValue) {
       Primitive fromBox = Primitive.ofBox(argValue.getType());
       if (fromBox == null || fromBox == Primitive.VOID) {
         return argValue;
@@ -3112,7 +3155,8 @@ public class RexImpTable {
 
     @Override Expression implementSafe(final RexToLixTranslator translator,
         final RexCall call, final List<Expression> argValueList) {
-      return null;
+      throw new IllegalStateException("This implementSafe should not be called,"
+          + " please call implement(...)");
     }
   }
 
@@ -3168,7 +3212,8 @@ public class RexImpTable {
 
     @Override Expression implementSafe(final RexToLixTranslator translator,
         final RexCall call, final List<Expression> argValueList) {
-      return null;
+      throw new IllegalStateException("This implementSafe should not be called,"
+          + " please call implement(...)");
     }
   }
 
@@ -3203,7 +3248,7 @@ public class RexImpTable {
   private static class ReflectiveImplementor extends AbstractRexCallImplementor {
     protected final Method method;
 
-    ReflectiveImplementor(Method method, NullPolicy nullPolicy) {
+    ReflectiveImplementor(Method method, @Nullable NullPolicy nullPolicy) {
       super(nullPolicy, false);
       this.method = method;
     }
@@ -3252,7 +3297,6 @@ public class RexImpTable {
   /** Implementor for the {@code RAND_INTEGER} function. */
   private static class RandIntegerImplementor extends AbstractRexCallImplementor {
     private final AbstractRexCallImplementor[] implementors = {
-        null,
         new ReflectiveImplementor(BuiltInMethod.RAND_INTEGER.method, nullPolicy),
         new ReflectiveImplementor(BuiltInMethod.RAND_INTEGER_SEED.method, nullPolicy)
     };
@@ -3267,7 +3311,7 @@ public class RexImpTable {
 
     @Override Expression implementSafe(final RexToLixTranslator translator,
         final RexCall call, final List<Expression> argValueList) {
-      return implementors[call.getOperands().size()]
+      return implementors[call.getOperands().size() - 1]
           .implementSafe(translator, call, argValueList);
     }
   }

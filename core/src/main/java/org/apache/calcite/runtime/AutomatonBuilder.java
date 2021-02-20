@@ -37,7 +37,9 @@ public class AutomatonBuilder {
   private final Map<String, Integer> symbolIds = new HashMap<>();
   private final List<State> stateList = new ArrayList<>();
   private final List<Transition> transitionList = new ArrayList<>();
+  @SuppressWarnings("method.invocation.invalid")
   private final State startState = createState();
+  @SuppressWarnings("method.invocation.invalid")
   private final State endState = createState();
 
   /** Adds a pattern as a start-to-end transition. */
@@ -118,7 +120,7 @@ public class AutomatonBuilder {
   /** Adds a symbol transition. */
   AutomatonBuilder symbol(State fromState, State toState,
       String name) {
-    Objects.requireNonNull(name);
+    Objects.requireNonNull(name, "name");
     final int symbolId =
         symbolIds.computeIfAbsent(name, k -> symbolIds.size());
     transitionList.add(new SymbolTransition(fromState, toState, symbolId));

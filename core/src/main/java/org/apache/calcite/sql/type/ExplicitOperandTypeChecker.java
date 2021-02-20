@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Parameter type-checking strategy for Explicit Type.
  */
@@ -35,7 +37,7 @@ public class ExplicitOperandTypeChecker implements SqlOperandTypeChecker {
   private final RelDataType type;
 
   public ExplicitOperandTypeChecker(RelDataType type) {
-    this.type = Objects.requireNonNull(type);
+    this.type = Objects.requireNonNull(type, "type");
   }
 
   @Override public boolean isOptional(int i) {
@@ -56,7 +58,9 @@ public class ExplicitOperandTypeChecker implements SqlOperandTypeChecker {
           families.add(SqlTypeFamily.ANY);
         }
       } else {
-        families.add(field.getType().getSqlTypeName().getFamily());
+        families.add(
+            requireNonNull(sqlTypeName.getFamily(),
+                () -> "keyType.getSqlTypeName().getFamily() null, type is " + sqlTypeName));
       }
     }
     return OperandTypes.family(families).checkOperandTypes(callBinding, throwOnFailure);

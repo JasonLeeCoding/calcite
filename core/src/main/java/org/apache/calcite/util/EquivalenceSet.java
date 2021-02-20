@@ -56,7 +56,7 @@ public class EquivalenceSet<E extends Comparable<E>> {
   /** Adds an element, and returns the element (which is its own parent).
    * If already present, returns the element's parent. */
   public E add(E e) {
-    final E parent = parents.get(Objects.requireNonNull(e));
+    final E parent = parents.get(Objects.requireNonNull(e, "e"));
     if (parent == null) {
       // Element is new. Add it to the map, as its own parent.
       parents.put(e, e);
@@ -71,14 +71,14 @@ public class EquivalenceSet<E extends Comparable<E>> {
   public E equiv(E e, E f) {
     final E eParent = add(e);
     if (!eParent.equals(e)) {
-      assert parents.get(eParent).equals(eParent);
+      assert Objects.equals(parents.get(eParent), eParent);
       final E root = equiv(eParent, f);
       parents.put(e, root);
       return root;
     }
     final E fParent = add(f);
     if (!fParent.equals(f)) {
-      assert parents.get(fParent).equals(fParent);
+      assert Objects.equals(parents.get(fParent), fParent);
       final E root = equiv(e, fParent);
       parents.put(f, root);
       return root;

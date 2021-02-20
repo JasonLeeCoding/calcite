@@ -365,12 +365,11 @@ public class ServerDdlExecutor extends DdlExecutorImpl {
       // Materialized view exists.
       execute((SqlDropObject) drop, context);
       if (table instanceof Wrapper) {
-        final MaterializationKey materializationKey =
-            ((Wrapper) table).unwrap(MaterializationKey.class);
-        if (materializationKey != null) {
-          MaterializationService.instance()
-              .removeMaterialization(materializationKey);
-        }
+        ((Wrapper) table).maybeUnwrap(MaterializationKey.class)
+            .ifPresent(materializationKey -> {
+              MaterializationService.instance()
+                  .removeMaterialization(materializationKey);
+            });
       }
     }
   }
@@ -578,7 +577,7 @@ public class ServerDdlExecutor extends DdlExecutorImpl {
         ColumnStrategy strategy) {
       this.expr = expr;
       this.type = type;
-      this.strategy = Objects.requireNonNull(strategy);
+      this.strategy = Objects.requireNonNull(strategy, "strategy");
       Preconditions.checkArgument(
           strategy == ColumnStrategy.NULLABLE
               || strategy == ColumnStrategy.NOT_NULLABLE

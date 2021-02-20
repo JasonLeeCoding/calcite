@@ -25,6 +25,8 @@ import org.apache.calcite.util.mapping.IntPair;
 
 import com.google.common.collect.ImmutableList;
 
+import org.checkerframework.checker.initialization.qual.NotOnlyInitialized;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,7 +40,8 @@ import java.util.TreeSet;
 class LatticeSpace {
   final SqlStatisticProvider statisticProvider;
   private final Map<List<String>, LatticeTable> tableMap = new HashMap<>();
-  final AttributedDirectedGraph<LatticeTable, Step> g =
+  @SuppressWarnings("assignment.type.incompatible")
+  final @NotOnlyInitialized AttributedDirectedGraph<LatticeTable, Step> g =
       new AttributedDirectedGraph<>(new Step.Factory(this));
   private final Map<List<String>, String> simpleTableNames = new HashMap<>();
   private final Set<String> simpleNames = new HashSet<>();
@@ -48,7 +51,7 @@ class LatticeSpace {
   final Map<LatticeTable, List<RexNode>> tableExpressions = new HashMap<>();
 
   LatticeSpace(SqlStatisticProvider statisticProvider) {
-    this.statisticProvider = Objects.requireNonNull(statisticProvider);
+    this.statisticProvider = Objects.requireNonNull(statisticProvider, "statisticProvider");
   }
 
   /** Derives a unique name for a table, qualifying with schema name only if
@@ -164,7 +167,9 @@ class LatticeSpace {
     if (field < fieldCount) {
       return fieldList.get(field).getName();
     } else {
-      return tableExpressions.get(table).get(field - fieldCount).toString();
+      List<RexNode> rexNodes = tableExpressions.get(table);
+      assert rexNodes != null : "no expressions found for table " + table;
+      return rexNodes.get(field - fieldCount).toString();
     }
   }
 }

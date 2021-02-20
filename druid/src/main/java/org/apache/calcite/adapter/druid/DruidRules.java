@@ -603,7 +603,7 @@ public class DruidRules {
 
     /** Returns an array of unique filter references from the given list of
      * {@link org.apache.calcite.rel.core.AggregateCall}s. */
-    private Set<Integer> getUniqueFilterRefs(List<AggregateCall> calls) {
+    private static Set<Integer> getUniqueFilterRefs(List<AggregateCall> calls) {
       Set<Integer> refs = new HashSet<>();
       for (AggregateCall call : calls) {
         if (call.hasFilter()) {
@@ -628,7 +628,7 @@ public class DruidRules {
      * <p>Should be called before pushing both the aggregate and project into
      * Druid. Assumes that at least one aggregate call has a filter attached to
      * it. */
-    private DruidQuery optimizeFilteredAggregations(RelOptRuleCall call,
+    private static DruidQuery optimizeFilteredAggregations(RelOptRuleCall call,
         DruidQuery query,
         Project project, Aggregate aggregate) {
       Filter filter = null;
@@ -672,10 +672,10 @@ public class DruidRules {
       // Erase references to filters
       for (AggregateCall aggCall : aggregate.getAggCallList()) {
         if ((uniqueFilterRefs.size() == 1
-            && allHaveFilters) // filters get extracted
+                && allHaveFilters) // filters get extracted
             || aggCall.hasFilter()
             && project.getProjects().get(aggCall.filterArg).isAlwaysTrue()) {
-          aggCall = aggCall.copy(aggCall.getArgList(), -1, aggCall.collation);
+          aggCall = aggCall.withFilter(-1);
         }
         newCalls.add(aggCall);
       }
